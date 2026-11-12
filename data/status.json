@@ -1,7 +1,14 @@
 {
   "round": 2,
-  "speaking": "正确性证明",
-  "since": "2026-11-12T19:13:32+08:00",
-  "calls": 16,
-  "r429": 0
+  "speaking": "反例猎手",
+  "since": "2026-11-12T19:15:19+08:00",
+  "calls": 17,
+  "r429": 0,
+  "session": "pnp-20261112",
+  "topic": "证明 P=NP",
+  "state": "running",
+  "consensus": false,
+  "consensus_text": null,
+  "votes": null,
+  "addressing": null
 }
