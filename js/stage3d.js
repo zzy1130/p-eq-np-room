@@ -916,7 +916,8 @@ export function createStage(container, overlayRoot, opts = {}) {
     const pts = [];
     for (const [id, b] of bots) {
       const o = overlay.get(id);
-      proj.set(b.pos.x, b.headTopY + 0.1, b.pos.y).project(camera);
+      // anchor = a point clearly above the head (hats included); the name tag sits on top of it, never on the body
+      proj.set(b.pos.x, b.headTopY + 0.42 * b.root.scale.y, b.pos.y).project(camera);
       const vis = proj.z < 1 && Math.abs(proj.x) < 1.2 && Math.abs(proj.y) < 1.2;
       const x = (proj.x * 0.5 + 0.5) * W, y = (-proj.y * 0.5 + 0.5) * H;
       o.anchor.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
@@ -938,7 +939,8 @@ export function createStage(container, overlayRoot, opts = {}) {
       if (!p.vis) continue;
       const o = p.o;
       if (!o.tagW) o.tagW = o.tag.offsetWidth || 70;
-      placed.push({ x: p.x - o.tagW / 2, y: p.y + 6, w: o.tagW, h: 20 });
+      placed.push({ x: p.x - o.tagW / 2, y: p.y - 18, w: o.tagW, h: 18 });
+      if (o.think.classList.contains('on')) placed.push({ x: p.x - 24, y: p.y - 42, w: 48, h: 22 });
     }
     const order = pts.filter((p) => want.has(p.id) && p.vis).sort((a, b) => want.get(a.id).prio - want.get(b.id).prio);
     for (const p of pts) {
@@ -958,7 +960,7 @@ export function createStage(container, overlayRoot, opts = {}) {
       if (!o.shown) { o.bubble.classList.add('show'); o.shown = true; }
       const w = o.w || 160, h = o.h || 48;
       // candidate positions: above head, then stacked higher, then left/right
-      const baseX = p.x - w / 2, baseY = p.y - 34 - h;
+      const baseX = p.x - w / 2, baseY = p.y - 26 - h;
       const cands = [[0, 0], [0, -h - 8], [w * 0.55, -10], [-w * 0.55, -10], [w * 0.6, -h - 12], [-w * 0.6, -h - 12], [0, -2 * h - 16], [w * 1.05, 0], [-w * 1.05, 0]];
       let best = null;
       for (const [dx, dy] of cands) {

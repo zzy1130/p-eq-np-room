@@ -242,6 +242,33 @@ function getStage() {
   return stage;
 }
 
+// ---------------- debate rules (shared by live + snapshot; legacy rooms carry chars/q_chars/limit_chars)
+const SPEECH_CPS = 5;   // 中文辩论语速 ≈ 300 字/分钟（与 roundtable/debate.py 一致）
+const DEFAULT_DEBATE_PHASES = (() => {
+  const P = [['1AC', 'constructive', '1AC 正方一辩立论', 480, 1], ['CX1', 'cx', 'CX 反方二辩质询正方一辩', 180, 4, 1], ['1NC', 'constructive', '1NC 反方一辩立论', 480, 3],
+    ['CX2', 'cx', 'CX 正方一辩质询反方一辩', 180, 1, 3], ['2AC', 'constructive', '2AC 正方二辩立论', 480, 2], ['CX3', 'cx', 'CX 反方一辩质询正方二辩', 180, 3, 2],
+    ['2NC', 'constructive', '2NC 反方二辩立论（negative block 第一篇）', 480, 4], ['CX4', 'cx', 'CX 正方二辩质询反方二辩', 180, 2, 4],
+    ['1NR', 'rebuttal', '1NR 反方一辩反驳（negative block 第二篇）', 300, 3], ['1AR', 'rebuttal', '1AR 正方一辩反驳', 300, 1], ['2NR', 'rebuttal', '2NR 反方二辩反驳', 300, 4], ['2AR', 'rebuttal', '2AR 正方二辩反驳', 300, 2]];
+  return P.map(([key, kind, label, secs, a, b]) => Object.assign({ key, kind, label, secs, budget_chars: secs * SPEECH_CPS }, kind === 'cx' ? { asker: a, answerer: b, max_pairs: 6 } : { speaker: a }));
+})();
+// stand-ins so the debate hall (podiums, judge bench, timer board) is drawn before the allocator has named anyone
+const DEBATE_PLACEHOLDER_ROLES = [
+  { id: 1, name: '正方一辩', side: 'aff', placeholder: true }, { id: 2, name: '正方二辩', side: 'aff', placeholder: true },
+  { id: 3, name: '反方一辩', side: 'neg', placeholder: true }, { id: 4, name: '反方二辩', side: 'neg', placeholder: true },
+  { id: 5, name: '主持·计时员', side: 'chair', placeholder: true }, { id: 6, name: 'Gemini 裁判', side: 'judge', placeholder: true }];
+const durTxt = (s) => { s = Math.round(Number(s) || 0); return s % 60 ? `${Math.floor(s / 60)} 分 ${s % 60} 秒` : `${s / 60} 分钟`; };
+const phaseBudget = (p) => p.budget_chars || (p.secs ? p.secs * SPEECH_CPS : 0);
+function phaseRuleTxt(p) {   // e.g. "8 分钟 · 约 2400 字"
+  if (p.chars || p.q_chars) return p.kind === 'cx' ? `${p.rounds} 问 · 问≤${p.q_chars} 答≤${p.a_chars} 字 · ${fmtClock(p.secs)}` : `≤${p.chars} 字 · ${fmtClock(p.secs)}`;   // legacy rooms
+  return p.kind === 'cx' ? `${durTxt(p.secs)} · 问答共用约 ${phaseBudget(p)} 字 · 最多 ${p.max_pairs || 6} 组` : `${durTxt(p.secs)} · 约 ${phaseBudget(p)} 字`;
+}
+function msgRuleTxt(m) {     // one finished utterance: spoken length vs. its time
+  if (m.limit_chars) return `${m.chars ?? 0}/${m.limit_chars} 字 · 用时 ${m.elapsed_s ?? '–'}s${m.limit_s ? ' / ' + m.limit_s + 's' : ''}${m.truncated ? ' · 超字截断' : ''}${m.overtime ? ' · 超时' : ''}`;   // legacy
+  const spoken = m.spoken_s ?? (m.chars || 0) / SPEECH_CPS;
+  const cx = m.type === 'cx_q' || m.type === 'cx_a';
+  return `${m.chars ?? 0} 字 ≈ ${fmtClock(spoken)}${cx ? '（质询共 ' + fmtClock(m.limit_s) + '）' : ' / ' + fmtClock(m.limit_s)}${m.truncated ? ' · 超时，已截断' : ''}${m.forfeited ? ' · 生成超时作废' : ''}`;
+}
+
 function openSession(sid) {
   const S = { sid, topic: null, roles: [], byId: new Map(), msgs: [], status: {}, verdict: null, finalExists: false,
     cursor: 0, follow: true, playing: false, tab: 'tl', closed: false, arrival: new Map(), verdictShownFor: -1, lastBundle: 0, openItems: new Set(), live: null, ws: null };
@@ -251,7 +278,7 @@ function openSession(sid) {
   $('sTitle').textContent = '加载中…'; $('kicker').textContent = '';
   $('verdict').classList.remove('on'); $('drawer').classList.add('hidden');
 
-  const mode = () => S.topic?.mode || S.status.mode || 'roundtable';
+  const mode = () => S.topic?.mode || S.status.mode || (String(sid).startsWith('db-') ? 'debate' : 'roundtable');
   const roleName = (id) => S.byId.get(id)?.name || (id ? '角色 ' + id : '');
   const colorOf = (id) => stage?.botColor(id) || '#8a7d70';
   const nameToId = (name) => { if (!name) return null; const base = String(name).replace(/\(.*$|（.*$/, ''); for (const r of S.roles) if (r.name === base || r.name === name) return r.id; return null; };
@@ -259,17 +286,33 @@ function openSession(sid) {
 
   function applyTopic(t) {
     if (!t) return;
-    const had = S.roles.length;
     S.topic = t; S.roles = t.roles || []; S.byId = new Map(S.roles.map((r) => [r.id, r]));
-    if (S.roles.length && (!had || had !== S.roles.length)) {
-      $('stageWrap').classList.toggle('debate', t.mode === 'debate');
-      getStage().setup({ mode: t.mode, roles: S.roles, seed: sid });
-    }
+    if (!t.mode) t.mode = mode();
+    normalizeRules();
+    setupStage();
     renderHeader();
   }
+  // the scene follows the mode from the first frame: a debate room draws the debate hall even while roles are being allocated
+  // GitHub Pages snapshots can be built by a long-running process that still has the old (char-limit) rules loaded;
+  // the room's own status.format (written by the debate process) tells which rules this room really runs with.
+  function normalizeRules() {
+    const t = S.topic;
+    if (!t || mode() !== 'debate') return;
+    const legacy = (t.phases || []).some((p) => p.chars || p.q_chars);
+    if (!(t.phases || []).length || (legacy && /NSDA/.test(S.status.format || ''))) {
+      t.phases = DEFAULT_DEBATE_PHASES;
+      if (S.status.format) t.format_name = S.status.format;
+    }
+  }
+  function setupStage() {
+    const m = mode();
+    const roles = S.roles.length ? S.roles : (m === 'debate' ? DEBATE_PLACEHOLDER_ROLES : []);
+    $('stageWrap').classList.toggle('debate', m === 'debate');
+    if (roles.length) getStage().setup({ mode: m, roles, seed: sid });   // setup() is a no-op when mode/roles are unchanged
+  }
   function applyBundle(b) {
-    applyTopic(b.topic);
     S.status = b.status || {};
+    applyTopic(b.topic || { mode: S.status.mode || mode(), topic: S.status.topic, roles: [], allocating: true });
     S.verdict = b.verdict || null;
     S.finalExists = !!(b.final_exists || b.final_text);
     S.finalText = b.final_text;
@@ -287,7 +330,7 @@ function openSession(sid) {
   }
   function applyIncoming(j) {
     if (j.topic && (!S.topic || (j.topic.roles || []).length !== S.roles.length || S.topic.allocating)) applyTopic(j.topic);
-    if (j.status) S.status = j.status;
+    if (j.status) { S.status = j.status; normalizeRules(); if (!S.roles.length) setupStage(); }
     if (j.verdict) S.verdict = j.verdict;
     if (j.final_exists != null) S.finalExists = j.final_exists;
     if (j.live) { S.live = j.live; renderLive(); }
@@ -416,7 +459,7 @@ function openSession(sid) {
     const txt = (m.short && !main) ? m.short : (main ? (m.short ? m.short + ' — ' : '') + plain(m.text, 70) : plain(m.text, 40));
     return `<span class="tp" style="--tc:${col}">${esc(lab)}</span>${to}<span class="bx">${esc(vote + txt)}</span>`;
   }
-  function phaseDef(key) { return (S.topic?.phases || []).find((p) => p.key === key); }
+  function phaseDef(key) { return (S.topic?.phases?.length ? S.topic.phases : mode() === 'debate' ? DEFAULT_DEBATE_PHASES : []).find((p) => p.key === key); }
   function computeFrame() {
     const shown = S.msgs.slice(0, S.cursor);
     const m = shown[shown.length - 1];
@@ -436,7 +479,7 @@ function openSession(sid) {
       const st = S.status;
       const curKey = liveNow ? st.phase_key : m?.phase;
       const ph = phaseDef(curKey);
-      f.phases = S.topic?.phases || [];
+      f.phases = S.topic?.phases?.length ? S.topic.phases : DEFAULT_DEBATE_PHASES;
       f.phaseIdx = liveNow ? (st.phase_idx ?? 0) : Math.max(0, f.phases.findIndex((p) => p.key === curKey));
       if (!liveNow && S.cursor >= S.msgs.length && S.verdict) f.phaseIdx = f.phases.length;
       if (liveNow && st.state !== 'judging') {
@@ -463,10 +506,15 @@ function openSession(sid) {
         const remain = (st.phase_deadline_ms - Date.now()) / 1000;
         t.remain = remain; t.clock = fmtClock(Math.max(remain, -599)); t.over = remain < 0;
         if (st.paused) { t.remain = null; t.over = false; t.clock = '⏸ ' + fmtClock(Math.max(remain, 0)); }
-        t.sub = st.paused ? '计时暂停：上游限流' : ph ? (ph.kind === 'cx' ? `问≤${ph.q_chars} 字 · 答≤${ph.a_chars} 字 · 共 ${ph.rounds} 问` : `限 ${ph.chars} 字 · 时限 ${fmtClock(ph.secs)}`) : '';
-      } else if (m && m.limit_chars) {
-        t.clock = fmtClock(m.elapsed_s); t.over = !!(m.overtime || m.truncated);
-        t.sub = `用时 ${fmtClock(m.elapsed_s)} / ${fmtClock(m.limit_s || ph?.secs)} · ${m.chars ?? 0}/${m.limit_chars} 字${m.truncated ? ' · 超字截断' : ''}`;
+        const legacy = ph && (ph.chars || ph.q_chars);
+        if (ph && !legacy) {   // new rooms: the clock is the model's generation slot; the rule is the speaking time
+          t.label = ph.label; t.sub = st.paused ? '计时暂停：上游限流' : `发言时长 ${durTxt(ph.secs)}（约 ${phaseBudget(ph)} 字）` +
+            (ph.kind === 'cx' && st.cx_used_chars != null ? ` · 已用约 ${st.cx_used_chars} 字` : '') + ' · 生成倒计时';
+        } else t.sub = st.paused ? '计时暂停：上游限流' : ph ? (ph.kind === 'cx' ? `问≤${ph.q_chars} 字 · 答≤${ph.a_chars} 字 · 共 ${ph.rounds} 问` : `限 ${ph.chars} 字 · 时限 ${fmtClock(ph.secs)}`) : '';
+      } else if (m && (m.limit_chars || m.budget_chars)) {
+        if (m.limit_chars) { t.clock = fmtClock(m.elapsed_s); t.sub = `用时 ${fmtClock(m.elapsed_s)} / ${fmtClock(m.limit_s || ph?.secs)} · ${m.chars ?? 0}/${m.limit_chars} 字${m.truncated ? ' · 超字截断' : ''}`; }
+        else { t.clock = fmtClock(m.spoken_s ?? (m.chars || 0) / SPEECH_CPS); t.sub = msgRuleTxt(m); }
+        t.over = !!(m.overtime || m.truncated);
       } else if (S.verdict && S.cursor >= S.msgs.length) {
         t.clock = S.verdict.winner === 'aff' ? '正方胜' : '反方胜';
         t.sub = `${S.verdict.scores.aff.total} : ${S.verdict.scores.neg.total}`;
@@ -544,7 +592,7 @@ function openSession(sid) {
         const to = m.reply_to && S.byId.get(Number(m.reply_to)) ? ` → ${esc(roleName(Number(m.reply_to)))}` : '';
         const ph = deb && m.phase ? `<span class="tp" style="--tc:#5a6380">${esc(m.phase)}</span>` : (m.round ? `<span style="color:var(--muted)">第${m.round}轮</span>` : '');
         const vote = m.type === 'vote' ? `<b style="color:${m.vote === 'disagree' ? 'var(--neg)' : 'var(--good)'}">${m.vote === 'disagree' ? '✗ 反对' : '✓ 赞成'}</b>` : '';
-        const lim = m.limit_chars ? `<div class="lim ${m.truncated || m.overtime ? 'bad' : ''}">${m.chars ?? 0}/${m.limit_chars} 字 · 用时 ${m.elapsed_s ?? '–'}s${m.limit_s ? ' / ' + m.limit_s + 's' : ''}${m.truncated ? ' · 超字截断' : ''}${m.overtime ? ' · 超时' : ''}</div>` : '';
+        const lim = (m.limit_chars || m.budget_chars) ? `<div class="lim ${m.truncated || m.overtime ? 'bad' : ''}">${msgRuleTxt(m)}</div>` : '';
         const short = m.type === 'vote' ? (m.position || m.short) : m.type === 'proposal' ? '表决：' + (m.conclusion || m.short) : m.short;
         return `<div class="tl-item${S.openItems.has(i) ? ' open' : ''}" data-i="${i}" style="--c:${colorOf(m.role_id)}">
           <div class="av">${esc((r?.name || m.role || '?').replace(/^(正方|反方)/, '').replace(/^[一二]辩·?/, '').slice(0, 1))}</div>
@@ -594,15 +642,17 @@ function openSession(sid) {
       (t.legacy ? '<div class="tl-ann"><span>旧场次（升级前创建），角色未配置 skill</span></div>' : '');
   }
   function renderFormat() {
-    const t = S.topic || {}; const ph = t.phases || []; const st = S.status;
+    const t = S.topic || {}; const ph = t.phases?.length ? t.phases : DEFAULT_DEBATE_PHASES; const st = S.status;
+    const legacy = ph.some((p) => p.chars || p.q_chars);
     let cur = S.cursor >= S.msgs.length && running() ? st.phase_idx : ph.findIndex((p) => p.key === S.msgs[S.cursor - 1]?.phase);
     if (S.msgs[S.cursor - 1]?.phase === 'JUDGE' || (S.verdict && S.cursor >= S.msgs.length)) cur = ph.length;
     $('pane').innerHTML = `<div class="fmt"><h3>${esc(t.format_name || 'Policy 辩论（简化版）')}</h3>
-      <p>完整的美式 <b>Policy / CX</b> 赛制：正反各 2 人，4 篇建设性发言（1AC/1NC/2AC/2NC），每篇之后一轮<b>质询</b>（对方辩手提问、发言者作答，每轮 3 组问答），然后 4 篇反驳（1NR/1AR/2NR/2AR），<b>正方最后发言</b>。每位辩手有自己的持久记忆（独立 pi 会话），质询时记得自己的立论。</p>
-      <ol class="phase-list">${ph.map((p, i) => `<li class="${i < cur ? 'done' : i === cur ? 'cur' : ''}"><span>${esc(p.label)}</span><span class="lm">${p.kind === 'cx' ? `${p.rounds} 问 · 问≤${p.q_chars} 答≤${p.a_chars} 字` : `≤${p.chars} 字`} · ${fmtClock(p.secs)}</span></li>`).join('')}
+      <p>美式 <b>Policy / CX</b> 赛制（按 NSDA 高中政策性辩论的标准时长）：正反各 2 人，4 篇建设性发言（1AC/1NC/2AC/2NC，各 8 分钟），每篇之后 3 分钟<b>质询</b>（由下一篇不发言的对方辩手提问、刚发言者作答），然后 4 篇反驳（1NR/1AR/2NR/2AR，各 5 分钟），<b>正方最后发言</b>。2NC 与 1NR 连着是反方的 <i>negative block</i>，属标准流程。准备时间（prep time）不模拟。每位辩手有自己的持久记忆（独立 pi 会话），质询时记得自己的立论。</p>
+      <ol class="phase-list">${ph.map((p, i) => `<li class="${i < cur ? 'done' : i === cur ? 'cur' : ''}"><span>${esc(p.label)}</span><span class="lm">${esc(phaseRuleTxt(p))}</span></li>`).join('')}
         <li class="${S.verdict && cur >= ph.length ? 'done' : st.state === 'judging' ? 'cur' : ''}"><span>裁判评议与宣判</span><span class="lm">${esc(S.verdict ? ((S.verdict.judge || {}).label || '') : 'Gemini 传令官 / 兜底')}</span></li></ol>
-      <h3>严格计时 / 限字</h3>
-      <p>每个环节都有字数上限和发言时限（计时牌倒计时）。超出字数的部分<b>硬截断</b>并标注「超字截断」；模型在时限内没交出发言，该发言<b>作废</b>。质询的所有问答共享一个总时限，时间到即结束。违规会进入裁判「规则」分项扣分。等待上游模型（限流/额度/出错重试）的时间<b>不计入</b>发言时间，计时牌显示 ⏸。</p>
+      ${legacy ? `<h3>严格计时 / 限字（本场为旧规则）</h3>
+      <p>本场创建于规则更新前：每个环节有字数上限和发言时限，超出字数的部分截断并标注「超字截断」；模型在时限内没交出发言，该发言<b>作废</b>。</p>` : `<h3>按时长计时</h3>
+      <p>每个环节只规定<b>发言时长</b>，按中文辩论语速约 <b>${SPEECH_CPS * 60} 字/分钟</b>折算：立论 8 分钟≈2400 字，反驳 5 分钟≈1500 字，质询 3 分钟≈900 字。辩手被要求用满时间；只有超过时长 10% 的部分才算<b>超时</b>，截断并标注「超时，已截断」。质询的问答共用 3 分钟，一问一答交替，提问方掌控节奏，可提前结束，最多 6 组。计时牌倒数的是模型的<b>生成时限</b>，超过仍未交出的发言<b>作废</b>。违规会进入裁判「规则」分项扣分。等待上游模型（限流/出错重试）的时间<b>不计入</b>，计时牌显示 ⏸。</p>`}
       <h3>裁判</h3>
       <p>主路径是 <b>Gemini 传令官</b>：赛后写出 <code>judge_request.json</code> 并通过 webhook 发出，等待 <code>verdict.json</code> / <code>verdict_herald.json</code>；超过 180 秒未收到，则由本机 <b>Claude Code CLI</b>（<code>claude -p</code>，同一量表）<b>兜底裁判</b>（写 <code>verdict_fallback.json</code>），界面会标明。Gemini 裁决晚到时自动改为以它为准，兜底保留为第二意见。量表五项各 10 分：论证、证据、交锋、质询、规则；另给辩手分（26–30）。按 flow 判，未回应的论点视为成立。</p></div>`;
   }
