@@ -92,15 +92,28 @@
     .chip.speak b { color: var(--accent); }
     .chip.bad b { color: var(--rebuttal); }
     .chip.good { background: #2fbf71; color: #fff; border-color: transparent; } .chip.good b { color: #fff; }
+    .votebar { display: none; align-items: center; gap: 10px; padding: 5px 14px; border-radius: 999px; background: var(--glass);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--line); box-shadow: 0 4px 16px rgba(80,50,20,.1);
+      font-size: 13px; font-weight: 700; }
+    .votebar.on { display: flex; animation: pop .5s cubic-bezier(.3,1.6,.5,1); }
+    .votebar .bar { display: flex; width: clamp(90px, 24vw, 220px); height: 12px; border-radius: 999px; overflow: hidden; background: #e6dccd; gap: 2px; }
+    .votebar .bar i { flex: 0 0 auto; flex-basis: 0; flex-grow: 0; transition: flex-grow .6s; min-width: 0; }
+    .votebar .a { background: #23a26b; } .votebar .d { background: #e0483d; } .votebar .x { background: #8a7d70; } .votebar .p { background: repeating-linear-gradient(45deg, #d8ccba 0 4px, #e6dccd 4px 8px); }
+    .votebar .vtx { display: flex; gap: 8px; white-space: nowrap; color: var(--muted); }
+    .votebar .ga { color: #23a26b; } .votebar .gd { color: #e0483d; }
+    .tag .vb { display: inline-block; width: 15px; height: 15px; line-height: 15px; text-align: center; border-radius: 50%; color: #fff;
+      font-size: 10px; margin: 0 4px 0 -4px; border: 1.5px solid #fff; }
+    .bubble .to { font-size: 11px; font-weight: 800; color: var(--tc, #888); margin-right: 3px; }
+    .short { margin: 8px 0 2px; padding: 6px 10px; background: rgba(0,0,0,.035); border-left: 4px solid var(--tc, #aaa); border-radius: 0 8px 8px 0; font-weight: 600; }
     .hint { position: fixed; left: 50%; bottom: calc(12px + var(--safe-b)); transform: translateX(-50%); font-size: 12px;
       color: var(--muted); background: var(--glass); padding: 3px 12px; border-radius: 999px; pointer-events: none; white-space: nowrap;
       transition: opacity 1s; }
 
-    .consensus { position: fixed; left: 50%; top: calc(96px + var(--safe-t)); transform: translate(-50%, -20px) scale(.9); opacity: 0; pointer-events: none;
+    .consensus { position: relative; transform: translateY(-20px) scale(.9); opacity: 0; pointer-events: none; visibility: hidden;
       text-align: center; padding: 10px 40px 12px; border-radius: 20px; color: #fff; width: min(760px, 94vw); cursor: pointer;
       background: linear-gradient(135deg, #2fbf71, #1f9d8f); box-shadow: 0 14px 40px rgba(20,90,60,.3), inset 0 0 0 3px rgba(255,255,255,.4);
       transition: all .6s cubic-bezier(.3,1.4,.5,1); }
-    .consensus.on { opacity: 1; transform: translate(-50%, 0) scale(1); pointer-events: auto; }
+    .consensus.on { opacity: 1; transform: none; pointer-events: auto; visibility: visible; }
     .consensus strong { display: block; font-size: clamp(24px, 5.5vw, 38px); letter-spacing: .14em; line-height: 1.2; text-shadow: 0 3px 0 rgba(0,0,0,.15); }
     .consensus div { margin-top: 4px; font-size: 14px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     .consensus div p { margin: 0; }
@@ -173,7 +186,8 @@
         transform: translateY(105%); padding-bottom: var(--safe-b); }
       .drawer.on, .panel.on { transform: none; }
       .hint { display: none; }
-      .consensus { top: calc(124px + var(--safe-t)); padding: 8px 34px 10px; }
+      .votebar { padding: 4px 10px; font-size: 12px; gap: 6px; }
+      .consensus { padding: 8px 34px 10px; }
       .consensus div { font-size: 13px; }
     }
   </style>
@@ -198,15 +212,19 @@
       <span class="chip">调用 <b id="st-calls">0</b></span>
       <span class="chip" id="chip-429">429 <b id="st-429">0</b></span>
       <span class="chip" id="chip-cons">共识 <b id="st-cons">未达成</b></span>
+      <span class="chip" id="chip-state" style="display:none">状态 <b id="st-state"></b></span>
       <span class="chip">消息 <b id="st-msgs">0</b></span>
+    </div>
+    <button class="votebar" id="votebar" title="表决"><span class="vt">✋ 表决</span>
+      <span class="bar"><i id="vb-a" class="a"></i><i id="vb-d" class="d"></i><i id="vb-x" class="x"></i><i id="vb-p" class="p"></i></span>
+      <span class="vtx" id="vb-txt"></span></button>
+    <div class="consensus" id="consensus">
+      <button class="x" id="closeCons" aria-label="关闭">×</button>
+      <strong>🎉 达成共识</strong>
+      <div id="consensus-text" title="点击展开/收起"></div>
     </div>
   </div>
 
-  <div class="consensus" id="consensus">
-    <button class="x" id="closeCons" aria-label="关闭">×</button>
-    <strong>🎉 达成共识</strong>
-    <div id="consensus-text" title="点击展开/收起"></div>
-  </div>
   <div class="hint" id="hint">拖动旋转 · 双指缩放 · 点小人或气泡看全文</div>
   <div class="err" id="err"></div>
 

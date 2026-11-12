@@ -38,6 +38,7 @@ const TYPES = {
   retract: { label: '撤回', color: '#d79b16' },
   summary: { label: '总结', color: '#23a26b' },
   vote: { label: '投票', color: '#8a52d6' },
+  proposal: { label: '提议', color: '#e0703f' },
   status: { label: '状态', color: '#8a7d70' },
 };
 const typeMeta = (t) => TYPES[t] || { label: t ? String(t).slice(0, 6) : '发言', color: '#8a7d70' };
@@ -337,6 +338,21 @@ const onHead = (x, y, k = 1) => {
 
 const tmpV = new THREE.Vector3();
 
+// Voting paddles (举牌): shared textures
+function paddleMat(bg, glyph) {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.beginPath(); g.arc(64, 64, 60, 0, Math.PI * 2); g.fillStyle = bg; g.fill();
+  g.lineWidth = 8; g.strokeStyle = '#ffffff'; g.stroke();
+  g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = '900 78px -apple-system, "Segoe UI Symbol", "Noto Sans SC", sans-serif';
+  g.fillText(glyph, 64, 70);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.MeshBasicMaterial({ map: t, transparent: true, side: THREE.DoubleSide });
+}
+const PADDLE = { agree: paddleMat('#23a26b', '✓'), disagree: paddleMat('#e0483d', '✗'), abstain: paddleMat('#8a7d70', '–') };
+const paddleDisc = new THREE.CircleGeometry(0.24, 28);
+
 class Bot {
   constructor(id) {
     this.id = id;
@@ -415,6 +431,14 @@ class Bot {
       mesh(G.sphere, skin, { p: [0, -0.23, 0], s: 0.072, parent: p });
       return p;
     });
+    // voting paddle held in the right hand (hidden unless voting)
+    const paddle = new THREE.Group(); paddle.visible = false; this.arms[1].add(paddle);
+    paddle.position.set(0, -0.25, 0);
+    mesh(G.cyl, '#8c552b', { p: [0, -0.16, 0], s: [0.016, 0.4, 0.016], parent: paddle });
+    this.paddleFace = new THREE.Mesh(paddleDisc, PADDLE.agree);
+    this.paddleFace.position.set(0, -0.5, 0.01); this.paddleFace.rotation.z = Math.PI;
+    paddle.add(this.paddleFace);
+    this.paddle = paddle;
 
     // head
     const headPivot = new THREE.Group(); headPivot.position.set(0, 0.76, 0); body.add(headPivot); this.headPivot = headPivot;
@@ -628,46 +652,79 @@ for (let id = 1; id <= N_BOTS; id++) {
  * Data & director
  * ========================================================================= */
 const state = {
-  msgs: [], status: {}, roles: new Map(), nameToId: new Map(), rawMsgs: null,
-  speakingId: null, act: null, recent: [], lastOk: 0, fails: 0, consensusClosed: false, first: true,
+  msgs: [], status: {}, roles: new Map(), nameToId: new Map(), rawKey: null, session: null,
+  speakingId: null, addressingId: null, act: null, recent: [], lastOk: 0, fails: 0, consensusClosed: false, first: true,
+  vote: { active: false, proposal: null, byId: new Map(), agree: 0, disagree: 0, abstain: 0, conclusion: '' },
 };
 
-function normalizeMessages(raw) {
-  const out = [];
-  const nameToId = new Map(state.nameToId);
+const validId = (v) => { const n = Number(v); return v !== null && v !== '' && Number.isInteger(n) && n >= 1 && n <= N_BOTS ? n : null; };
+function normVote(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'boolean') return v ? 'agree' : 'disagree';
+  if (typeof v === 'object') v = v.vote ?? v.choice ?? JSON.stringify(v);
+  const s = String(v).toLowerCase().trim();
+  if (/disagree|反对|不同意|不赞成|reject|^no$|^n$|^false$|^-1$/.test(s)) return 'disagree';
+  if (/agree|同意|赞成|支持|approve|accept|^yes$|^y$|^true$|^\+?1$/.test(s)) return 'agree';
+  return 'abstain';
+}
+const VOTE_META = {
+  agree: { label: '赞成', icon: '✓', color: '#23a26b' },
+  disagree: { label: '反对', icon: '✗', color: '#e0483d' },
+  abstain: { label: '弃权', icon: '–', color: '#8a7d70' },
+};
+const str = (v) => (v == null ? '' : typeof v === 'string' ? v.trim() : JSON.stringify(v));
+
+function normalizeMessages(raw, wantSession) {
+  const all = [];
+  const nameToId = new Map();
   let nextAuto = 1;
   for (const line of raw.split('\n')) {
     const s = line.trim(); if (!s) continue;
     let m; try { m = JSON.parse(s); } catch { continue; }
     if (!m || typeof m !== 'object') continue;
     const role = m.role != null ? String(m.role) : (m.name != null ? String(m.name) : '');
-    let id = Number(m.role_id);
-    if (!(Number.isInteger(id) && id >= 1 && id <= N_BOTS)) {
+    let id = validId(m.role_id);
+    if (id == null) {
       if (role && nameToId.has(role)) id = nameToId.get(role);
       else { while (nextAuto <= N_BOTS && [...nameToId.values()].includes(nextAuto)) nextAuto++; id = nextAuto <= N_BOTS ? nextAuto : (hashStr(role) % N_BOTS) + 1; }
     }
-    if (role && !nameToId.has(role)) nameToId.set(role, id);
-    out.push({
-      i: out.length, ts: m.ts ?? m.time ?? '', round: m.round ?? '', id,
-      role: role || ('角色 ' + id), type: String(m.type ?? '').toLowerCase().trim(),
-      text: typeof m.text === 'string' ? m.text : (m.text == null ? (m.content ?? '') : JSON.stringify(m.text)),
-      vote: m.vote,
+    if (role) nameToId.set(role, id);
+    const type = String(m.type ?? '').toLowerCase().trim();
+    let replyTo = validId(m.reply_to);
+    if (replyTo == null && m.reply_to != null && nameToId.has(String(m.reply_to))) replyTo = nameToId.get(String(m.reply_to));
+    if (replyTo === id) replyTo = null;
+    all.push({
+      ts: m.ts ?? m.time ?? '', round: m.round ?? '', id, role: role || ('角色 ' + id), type,
+      text: typeof m.text === 'string' ? m.text : (m.text == null ? str(m.content) : JSON.stringify(m.text)),
+      session: m.session != null ? String(m.session) : null, replyTo,
+      short: str(m.short), position: str(m.position), conclusion: str(m.conclusion),
+      vote: m.vote, voteN: normVote(m.vote), ballot: m.is_ballot === true || type === 'proposal',
     });
   }
-  state.nameToId = nameToId;
-  return out;
+  // keep only the current session (lines without a session tag are always kept)
+  let session = wantSession != null && wantSession !== '' ? String(wantSession) : null;
+  if (!session) for (let j = all.length - 1; j >= 0; j--) if (all[j].session) { session = all[j].session; break; }
+  const msgs = session ? all.filter((m) => !m.session || m.session === session) : all;
+  msgs.forEach((m, i) => { m.i = i; });
+  state.nameToId = new Map();
+  for (const m of msgs) state.nameToId.set(m.role, m.id);
+  return { msgs, session };
 }
 
 function resolveSpeaker(sp) {
+  if (Array.isArray(sp)) sp = sp[0];
+  if (sp && typeof sp === 'object') sp = sp.role_id ?? sp.id ?? sp.role ?? sp.name;
   if (sp == null || sp === '' || sp === false) return null;
-  if (typeof sp === 'number' || /^\d+$/.test(String(sp))) { const n = Number(sp); return n >= 1 && n <= N_BOTS ? n : null; }
+  if (typeof sp === 'number' || /^\d+$/.test(String(sp))) return validId(sp);
   const s = String(sp).trim();
   if (state.nameToId.has(s)) return state.nameToId.get(s);
   for (const [name, id] of state.nameToId) if (name && (s.includes(name) || name.includes(s))) return id;
   return null;
 }
 
-function findRebutTarget(m) {
+function guessTarget(m) {
+  if (m.replyTo) return m.replyTo;
+  if (m.type !== 'rebuttal') return null;
   const t = m.text;
   let best = null, bestIdx = Infinity;
   for (const [name, id] of state.nameToId) {
@@ -685,8 +742,61 @@ function findRebutTarget(m) {
 
 function startAct(m, fresh) {
   const now = performance.now() / 1000;
-  const kind = m.type === 'rebuttal' ? 'rebut' : m.type === 'vote' ? 'vote' : m.type === 'retract' ? 'retract' : 'present';
-  state.act = { botId: m.id, kind, target: kind === 'rebut' ? findRebutTarget(m) : null, until: now + (fresh ? 18 : 22), msg: m };
+  const target = guessTarget(m);
+  let kind;
+  if (m.type === 'rebuttal') kind = 'rebut';
+  else if (m.type === 'vote') kind = 'vote';
+  else if (m.type === 'retract') kind = 'retract';
+  else if (m.type === 'proposal' || m.type === 'status') kind = 'present';
+  else kind = target ? 'address' : 'present';
+  if (kind === 'rebut' && !target) kind = 'present';
+  state.act = { botId: m.id, kind, target, until: now + (fresh ? 18 : 22), msg: m };
+}
+
+// Voting phase: after the latest proposal / ballot, or whenever status.votes is set.
+function computeVotes() {
+  const st = state.status, msgs = state.msgs;
+  let pIdx = -1;
+  for (let j = msgs.length - 1; j >= 0; j--) if (msgs[j].ballot) { pIdx = j; break; }
+  const byId = new Map();
+  let discussionAfter = false;
+  if (pIdx >= 0) {
+    for (let j = pIdx + 1; j < msgs.length; j++) {
+      const m = msgs[j];
+      if (m.type === 'vote' && m.voteN) byId.set(m.id, { vote: m.voteN, msg: m });
+      else if (m.type !== 'status' && m.type !== 'vote') discussionAfter = true;
+    }
+  } else {
+    let lastRound = null;
+    for (let j = msgs.length - 1; j >= 0; j--) if (msgs[j].type === 'vote') { lastRound = msgs[j].round; break; }
+    for (const m of msgs) if (m.type === 'vote' && m.voteN && m.round === lastRound) byId.set(m.id, { vote: m.voteN, msg: m });
+  }
+  const sv = st.votes && typeof st.votes === 'object' ? st.votes : null;
+  const count = (k) => [...byId.values()].filter((v) => v.vote === k).length;
+  const proposal = pIdx >= 0 ? msgs[pIdx] : null;
+  state.vote = {
+    active: !!sv || (pIdx >= 0 && !discussionAfter) || (pIdx < 0 && byId.size > 0 && msgs[msgs.length - 1]?.type === 'vote'),
+    proposal, byId,
+    agree: Number(sv?.agree ?? count('agree')) || 0,
+    disagree: Number(sv?.disagree ?? count('disagree')) || 0,
+    abstain: Number(sv?.abstain ?? count('abstain')) || 0,
+    conclusion: str(sv?.conclusion) || proposal?.conclusion || proposal?.short || '',
+  };
+}
+
+function bubbleHtml(m) {
+  const tm = typeMeta(m.type);
+  let head = `<span class="bt">${esc(tm.label)}</span>`;
+  let body = m.short || plain(m.text, 80);
+  if (m.type === 'vote' && m.voteN) {
+    const vm = VOTE_META[m.voteN];
+    head = `<span class="bt" style="background:${vm.color}">${vm.icon} ${vm.label}</span>`;
+    body = m.position || m.short || plain(m.text, 80);
+  } else if (m.type === 'proposal') {
+    body = m.short || m.conclusion || plain(m.text, 80);
+  }
+  const to = m.replyTo && m.type !== 'vote' ? `<span class="to">→ ${esc(bots[m.replyTo]?.name || '')}</span> ` : '';
+  return `<div class="bx">${head}${to}${esc(body.length > 90 ? body.slice(0, 90) + '…' : body) || '…'}</div>`;
 }
 
 function updateRecent() {
@@ -700,19 +810,29 @@ function updateRecent() {
   for (let id = 1; id <= N_BOTS; id++) {
     const o = overlay[id];
     const rank = rec.findIndex((m) => m.id === id);
-    if (rank < 0) { o.bubble.classList.remove('on'); o.bubble._msg = null; o.msg = null; continue; }
+    if (rank < 0) { o.bubble.classList.remove('on'); o.bubble._msg = null; o.msg = null; o.rank = -1; continue; }
     const m = rec[rank];
-    const tm = typeMeta(m.type);
-    if (o.msg !== m.i) {
-      o.msg = m.i; o.bubble._msg = m.i;
-      const vote = m.vote != null && m.vote !== '' ? `<b>${esc(typeof m.vote === 'object' ? JSON.stringify(m.vote) : m.vote)}</b> · ` : '';
-      o.bubble.innerHTML = `<div class="bx"><span class="bt">${esc(tm.label)}</span>${vote}${esc(plain(m.text, 80)) || '…'}</div>`;
-      o.bubble.style.setProperty('--tc', tm.color);
+    const key = m.i + '|' + m.ts;
+    if (o.msg !== key) {
+      o.msg = key; o.bubble._msg = m.i;
+      o.bubble.innerHTML = bubbleHtml(m);
+      o.bubble.style.setProperty('--tc', m.type === 'vote' && m.voteN ? VOTE_META[m.voteN].color : typeMeta(m.type).color);
       o.bubble.classList.remove('on'); void o.bubble.offsetWidth; o.bubble.classList.add('on');
     }
     o.bubble.style.setProperty('--s', rank === 0 ? 1 : 0.86);
     o.bubble.style.setProperty('--o', rank === 0 ? 1 : 0.8);
     o.rank = rank;
+  }
+}
+
+function updateTags() {
+  for (let id = 1; id <= N_BOTS; id++) {
+    const v = state.vote.active ? state.vote.byId.get(id) : null;
+    const key = bots[id].name + '|' + (v?.vote || '');
+    const o = overlay[id];
+    if (o.tagKey === key) continue;
+    o.tagKey = key;
+    o.tag.innerHTML = (v ? `<span class="vb" style="background:${VOTE_META[v.vote].color}">${VOTE_META[v.vote].icon}</span>` : '') + esc(bots[id].name);
   }
 }
 
@@ -729,32 +849,38 @@ async function poll() {
     if (rawStatus) { try { const j = JSON.parse(rawStatus); if (j && typeof j === 'object') st = j; } catch { /* tolerate */ } }
     state.status = st;
     const raw = rawMsgs ?? '';
+    const key = raw.length + ':' + hashStr(raw) + '|' + (st.session ?? '');
     let changed = false;
-    if (raw !== state.rawMsgs) {
-      const prevLen = state.msgs.length;
-      const prevFirst = state.msgs[0]?.ts;
-      state.rawMsgs = raw;
-      const msgs = normalizeMessages(raw);
-      const reset = msgs.length < prevLen || (prevLen && msgs[0]?.ts !== prevFirst);
-      state.msgs = msgs;
+    if (key !== state.rawKey) {
+      const prevLen = state.msgs.length, prevFirst = state.msgs[0]?.ts, prevSession = state.session;
+      state.rawKey = key;
+      const { msgs, session } = normalizeMessages(raw, st.session);
+      const reset = msgs.length < prevLen || (prevLen && msgs[0]?.ts !== prevFirst) || session !== prevSession;
+      state.msgs = msgs; state.session = session;
+      state.roles = new Map();
       for (const m of msgs) state.roles.set(m.id, m.role);
       changed = true;
       const newOnes = reset || state.first ? [] : msgs.slice(prevLen);
       if (newOnes.length) startAct(newOnes[newOnes.length - 1], true);
       else if ((state.first || reset) && msgs.length) startAct(msgs[msgs.length - 1], false);
+      else if (reset) state.act = null;
     }
-    const seed = String(st.session ?? state.msgs[0]?.ts ?? 'p-eq-np');
+    const seed = String(st.session ?? state.session ?? state.msgs[0]?.ts ?? 'p-eq-np');
     if (seed !== currentSeed) { rebuildBots(seed); changed = true; }
+    for (let id = 1; id <= N_BOTS; id++) bots[id].name = state.roles.get(id) || ('角色 ' + id);
+    const ended = ['consensus', 'stopped'].includes(String(st.state ?? '').toLowerCase());
+    state.speakingId = ended ? null : resolveSpeaker(st.speaking);
+    state.addressingId = resolveSpeaker(st.addressing);
+    if (state.addressingId === state.speakingId) state.addressingId = null;
+    computeVotes();
+    updateTags();
     if (changed) {
-      for (let id = 1; id <= N_BOTS; id++) {
-        bots[id].name = state.roles.get(id) || ('角色 ' + id);
-        overlay[id].tag.textContent = bots[id].name;
-      }
       updateRecent();
       renderLog();
-      if (panelBot && $('panel').classList.contains('on')) renderPanel(panelBot, panelMsg);
     }
-    state.speakingId = resolveSpeaker(st.speaking);
+    const vkey = state.vote.active + '|' + [...state.vote.byId.entries()].map(([k, v]) => k + v.vote).join(',') + '|' + state.vote.agree + ':' + state.vote.disagree;
+    if (panelBot && $('panel').classList.contains('on') && (changed || (panelBot === 'vote' && vkey !== state.vkey))) renderPanel(panelBot, panelMsg);
+    state.vkey = vkey;
     renderHud();
     state.lastOk = Date.now(); state.fails = 0; $('err').style.display = 'none';
   } catch (e) {
@@ -779,7 +905,21 @@ function renderHud() {
   const spName = st.speaking ? String(st.speaking) : '';
   let since = '';
   if (st.since) { const d = (Date.now() - new Date(st.since).getTime()) / 1000; if (isFinite(d) && d >= 0) since = d < 90 ? ` · ${Math.round(d)}s` : ` · ${Math.round(d / 60)}min`; }
-  $('st-speak').textContent = spName ? spName + since : '—';
+  const addr = state.addressingId ? bots[state.addressingId].name : (st.addressing && typeof st.addressing !== 'object' ? String(st.addressing) : '');
+  $('st-speak').textContent = spName ? spName + (addr ? ' → ' + addr : '') + since : '—';
+  const stateName = { running: '进行中', consensus: '已达成共识', stopped: '已停止', voting: '表决中', paused: '暂停' }[String(st.state ?? '').toLowerCase()] ?? (st.state ? String(st.state) : '');
+  $('chip-state').style.display = stateName ? '' : 'none';
+  $('st-state').textContent = stateName;
+  $('chip-state').classList.toggle('bad', String(st.state).toLowerCase() === 'stopped');
+  // vote bar
+  const V = state.vote, vb = $('votebar');
+  vb.classList.toggle('on', V.active);
+  if (V.active) {
+    const pend = Math.max(0, N_BOTS - V.agree - V.disagree - V.abstain);
+    $('vb-a').style.flexGrow = V.agree; $('vb-d').style.flexGrow = V.disagree; $('vb-x').style.flexGrow = V.abstain; $('vb-p').style.flexGrow = pend;
+    $('vb-txt').innerHTML = `<b class="ga">✓ ${V.agree}</b><b class="gd">✗ ${V.disagree}</b>` + (V.abstain ? `<b>– ${V.abstain}</b>` : '') + (pend ? `<span>待投 ${pend}</span>` : '');
+    vb.title = V.conclusion || '表决';
+  }
   $('st-calls').textContent = st.calls ?? 0;
   $('st-429').textContent = st.r429 ?? 0;
   $('chip-429').classList.toggle('bad', Number(st.r429) > 0);
@@ -787,15 +927,16 @@ function renderHud() {
   const cons = truthy(st.consensus);
   $('st-cons').textContent = cons ? '已达成 ✔' : '未达成';
   $('chip-cons').classList.toggle('good', cons);
-  $('consensus-text').innerHTML = cons ? md(st.consensus_text ?? '') : '';
+  $('consensus-text').innerHTML = cons ? md(str(st.consensus_text) || str(st.votes?.conclusion) || state.vote.conclusion || '') : '';
   $('consensus').classList.toggle('on', cons && !state.consensusClosed);
   if (!cons) state.consensusClosed = false;
   const title = topic.length <= 8 ? topic : 'P ≟ NP';
-  drawHolo(title, cons ? '✔ 达成共识' : (st.round != null ? `第 ${st.round} 轮` : '圆桌会议'), cons);
-  $('live').classList.toggle('stale', Date.now() - state.lastOk > 15000 && state.lastOk > 0);
+  drawHolo(title, cons ? '✔ 达成共识' : state.vote.active ? `表决 ${state.vote.agree} : ${state.vote.disagree}` : (st.round != null ? `第 ${st.round} 轮` : '圆桌会议'), cons);
+  $('live').classList.toggle('stale', (Date.now() - state.lastOk > 15000 && state.lastOk > 0) || String(st.state).toLowerCase() === 'stopped');
 }
 setInterval(() => state.lastOk && renderHud(), 1000);
 
+$('votebar').addEventListener('click', () => openPanel('vote'));
 $('chip-cons').addEventListener('click', () => { state.consensusClosed = false; renderHud(); });
 $('consensus').addEventListener('click', (e) => { if (!e.target.closest('.x')) $('consensus').classList.toggle('full'); });
 $('closeCons').addEventListener('click', (e) => { e.stopPropagation(); state.consensusClosed = true; $('consensus').classList.remove('on'); });
@@ -813,7 +954,7 @@ function renderLog(force) {
   for (const m of state.msgs) {
     if (m.round !== lastRound) { html += `<div class="roundsep">— 第 ${esc(m.round)} 轮 —</div>`; lastRound = m.round; }
     const tm = typeMeta(m.type);
-    html += `<button class="item" data-i="${m.i}" style="--tc:${tm.color}"><div class="meta"><span class="ty">${esc(tm.label)}</span><span class="who">${esc(m.role)}</span><span>${esc(fmtTime(m.ts))}</span></div><div class="pv">${esc(plain(m.text, 160))}</div></button>`;
+    html += `<button class="item" data-i="${m.i}" style="--tc:${tm.color}"><div class="meta"><span class="ty">${esc(tm.label)}</span><span class="who">${esc(m.role)}</span>${m.replyTo ? `<span>→ ${esc(bots[m.replyTo].name)}</span>` : ''}${m.type === 'vote' && m.voteN ? `<span class="ty" style="--tc:${VOTE_META[m.voteN].color}">${VOTE_META[m.voteN].icon} ${VOTE_META[m.voteN].label}</span>` : ''}<span>${esc(fmtTime(m.ts))}</span></div><div class="pv">${esc(m.type === 'vote' && m.position ? m.position : m.short || plain(m.text, 160))}</div></button>`;
   }
   el.innerHTML = html;
   if (nearBottom || force) el.scrollTop = el.scrollHeight;
@@ -852,24 +993,55 @@ function openPanel(id, msgIndex) {
   $('panel').classList.add('on');
   $('panelBody').scrollTop = 0;
 }
+function renderVotePanel() {
+  const V = state.vote;
+  const pend = Math.max(0, N_BOTS - V.agree - V.disagree - V.abstain);
+  $('panelTitle').textContent = '✋ 举牌表决' + (V.active ? '' : '（已结束）');
+  $('panelSub').textContent = `赞成 ${V.agree} · 反对 ${V.disagree}` + (V.abstain ? ` · 弃权 ${V.abstain}` : '') + (pend ? ` · 待投 ${pend}` : '');
+  $('panelDot').style.setProperty('--c', V.disagree > V.agree ? '#e0483d' : '#23a26b');
+  let html = '';
+  if (V.proposal || V.conclusion) {
+    const p = V.proposal;
+    html += `<div class="msgcard" style="--tc:${typeMeta('proposal').color}"><div class="meta"><span class="ty" style="--tc:${typeMeta('proposal').color}">提议</span>${p ? `<span>${esc(p.role)}</span><span>第 ${esc(p.round)} 轮</span><span>${esc(fmtTime(p.ts))}</span>` : ''}</div><div class="md"><blockquote>${md(V.conclusion)}</blockquote></div></div>`;
+  }
+  html += '<div class="sec">各席投票</div>';
+  for (let id = 1; id <= N_BOTS; id++) {
+    const v = V.byId.get(id);
+    const vm = v ? VOTE_META[v.vote] : null;
+    html += `<button class="item vrow" data-bot="${id}" ${v ? `data-i="${v.msg.i}"` : ''} style="--tc:${vm ? vm.color : '#cfc6bb'}"><div class="meta"><span class="dot" style="--c:${bots[id].color};width:16px;height:16px;border-width:2px"></span><span class="who">${esc(bots[id].name)}</span>${vm ? `<span class="ty">${vm.icon} ${vm.label}</span>` : '<span>待投…</span>'}</div>${v ? `<div class="pv">${esc(v.msg.position || v.msg.short || plain(v.msg.text, 140))}</div>` : ''}</button>`;
+  }
+  $('panelBody').innerHTML = html;
+}
+$('panelBody').addEventListener('click', (e) => {
+  const b = e.target.closest('.vrow'); if (!b) return;
+  openPanel(+b.dataset.bot, b.dataset.i != null ? +b.dataset.i : undefined);
+});
 function renderPanel(id, msgIndex) {
+  if (id === 'vote') return renderVotePanel();
   const mine = state.msgs.filter((m) => m.id === id);
   const sel = msgIndex != null ? state.msgs[msgIndex] : mine[mine.length - 1];
+  if (!bots[id]) return;
   $('panelTitle').textContent = bots[id].name;
   $('panelSub').textContent = `${id} 号席 · 共 ${mine.length} 条发言` + (state.speakingId === id ? ' · 正在思考…' : '');
   $('panelDot').style.setProperty('--c', bots[id].color || '#888');
   let html = '';
   if (sel) {
     const tm = typeMeta(sel.type);
-    const vote = sel.vote != null && sel.vote !== '' ? `<span>投票：<b>${esc(typeof sel.vote === 'object' ? JSON.stringify(sel.vote) : sel.vote)}</b></span>` : '';
-    html += `<div class="msgcard" style="--tc:${tm.color}"><div class="meta"><span class="ty" style="--tc:${tm.color}">${esc(tm.label)}</span><span>第 ${esc(sel.round)} 轮</span><span>${esc(fmtTime(sel.ts))}</span>${vote}</div><div class="md">${md(sel.text)}</div></div>`;
+    const vm = sel.voteN ? VOTE_META[sel.voteN] : null;
+    const vote = vm ? `<span class="ty" style="--tc:${vm.color}">${vm.icon} ${vm.label}</span>` : '';
+    const to = sel.replyTo ? `<span>回应 <b>${esc(bots[sel.replyTo].name)}</b></span>` : '';
+    let extra = '';
+    if (sel.short) extra += `<div class="short">💬 ${esc(sel.short)}</div>`;
+    if (sel.type === 'vote' && sel.position) extra += `<div class="short" style="border-color:${vm ? vm.color : '#aaa'}">立场：${esc(sel.position)}</div>`;
+    if (sel.conclusion) extra += `<div class="md"><blockquote>${md(sel.conclusion)}</blockquote></div>`;
+    html += `<div class="msgcard" style="--tc:${vm ? vm.color : tm.color}"><div class="meta"><span class="ty" style="--tc:${tm.color}">${esc(tm.label)}</span>${vote}<span>第 ${esc(sel.round)} 轮</span><span>${esc(fmtTime(sel.ts))}</span>${to}</div>${extra}<div class="md">${md(sel.text)}</div></div>`;
   } else html += '<div class="empty">这位还没发过言。</div>';
   const others = mine.filter((m) => m !== sel).reverse();
   if (others.length) {
     html += `<div class="sec">TA 的历史发言（${others.length}）</div>`;
     for (const m of others) {
       const tm = typeMeta(m.type);
-      html += `<details class="hist" style="--tc:${tm.color}"><summary><span class="ty" style="--tc:${tm.color}">${esc(tm.label)}</span> 第 ${esc(m.round)} 轮 · ${esc(fmtTime(m.ts))}<div class="pv" style="color:#6f6258;font-size:12.5px">${esc(plain(m.text, 90))}</div></summary><div class="md">${md(m.text)}</div></details>`;
+      html += `<details class="hist" style="--tc:${tm.color}"><summary><span class="ty" style="--tc:${tm.color}">${esc(tm.label)}</span> 第 ${esc(m.round)} 轮 · ${esc(fmtTime(m.ts))}<div class="pv" style="color:#6f6258;font-size:12.5px">${esc(m.short || plain(m.text, 90))}</div></summary><div class="md">${md(m.text)}</div></details>`;
     }
   }
   $('panelBody').innerHTML = html;
@@ -911,8 +1083,13 @@ setTimeout(() => { $('hint').style.opacity = 0; }, 12000);
 function botRole(b, now) {
   const a = state.act;
   if (a && a.botId === b.id && now < a.until) return a.kind;
-  if (a && a.kind === 'rebut' && a.target === b.id && now < a.until && bots[a.botId].gBlend > 0.3) return 'shocked';
+  if (a && a.target === b.id && now < a.until && bots[a.botId].gBlend > 0.3) {
+    if (a.kind === 'rebut') return 'shocked';
+    if (a.kind === 'address') return 'listen';
+  }
   if (state.speakingId === b.id) return 'think';
+  if (state.vote.active && state.vote.byId.has(b.id)) return 'voted';
+  if (state.addressingId === b.id && state.speakingId && bots[state.speakingId].gBlend > 0.3) return 'listen';
   if (truthy(state.status.consensus) && (now + b.id * 1.37) % 15 < 4.5) return 'cheer';
   return 'idle';
 }
@@ -929,20 +1106,24 @@ function updateBot(b, dt, now, focus) {
   if (role === 'present') {
     const off = ringPos(b.id, 0.35);
     b.goal.copy(off); allowTable = true; speedMax = 1.5;
-  } else if (role === 'rebut') {
+  } else if (role === 'rebut' || role === 'address') {
     const t = bots[state.act.target];
     if (t) {
       const tp = t.pos.clone();
       const inward = tp.clone().multiplyScalar(-1).normalize();
       b.goal.copy(tp).addScaledVector(inward, 0.8);
       if (b.goal.length() < CLEAR_R + 0.05) b.goal.setLength(CLEAR_R + 0.05);
-      faceTo = t.pos; speedMax = 1.7;
+      faceTo = t.pos; speedMax = role === 'rebut' ? 1.7 : 1.35;
     } else { b.goal.copy(ringPos(b.id, 0.35)); allowTable = true; }
-  } else if (role === 'think' || role === 'vote' || role === 'retract') {
+  } else if (role === 'think' || role === 'vote' || role === 'voted' || role === 'retract') {
     b.goal.copy(ringPos(b.id, STAND_R));
-  } else if (role === 'shocked' || role === 'cheer') {
+    if (role === 'think' && state.addressingId) faceTo = bots[state.addressingId].pos;
+    if ((role === 'vote' || role === 'voted') && state.vote.proposal && state.vote.proposal.id !== b.id) faceTo = bots[state.vote.proposal.id].pos;
+  } else if (role === 'shocked' || role === 'cheer' || role === 'listen') {
     // stay put, stand up
     b.goal.copy(b.pos);
+    if (role === 'listen') faceTo = (state.act && state.act.target === b.id && state.act.kind === 'address' ? bots[state.act.botId] : bots[state.speakingId] || bots[state.act?.botId])?.pos || null;
+    if (role === 'shocked') faceTo = bots[state.act.botId].pos;
   } else {
     // idle wander / sit cycle
     b.modeT -= dt;
@@ -1052,9 +1233,21 @@ function updateBot(b, dt, now, focus) {
   } else if (role === 'think') {
     mix('aRx', -2.1); mix('aRz', 0.6); mix('headTilt', 0.22 + Math.sin(now * 1.3) * 0.05); mix('headNod', -0.12);
     mix('aLz', -0.15);
-  } else if (role === 'vote') {
-    mix('aRz', 2.9 + Math.sin(now * 6) * 0.15); mix('aRx', 0);
-    bounce = Math.max(0, Math.sin(now * 6)) * 0.12 * g;
+  } else if (role === 'vote' || role === 'voted') {
+    const myVote = state.vote.byId.get(b.id)?.vote || state.act?.msg?.voteN || 'agree';
+    mix('aRz', 2.75 + Math.sin(now * 3 + b.id) * 0.12); mix('aRx', -0.15);
+    mix('aLz', -0.35);
+    if (myVote === 'disagree') { mix('headTilt', Math.sin(now * 7) * 0.12); T.brow = g; }
+    else mix('headNod', Math.sin(now * 4 + b.id) * 0.1);
+    const party = truthy(state.status.consensus) ? 0.22 : 0.06;
+    bounce = Math.max(0, Math.sin(now * (role === 'vote' ? 6 : 4) + b.id)) * party * g + (role === 'vote' ? Math.max(0, Math.sin(now * 6)) * 0.1 * g : 0);
+  } else if (role === 'address') {
+    mix('aRx', -1.15 + Math.sin(now * 4) * 0.25); mix('aRz', 0.35 + Math.sin(now * 2.3) * 0.15);
+    mix('aLz', -0.7 - Math.sin(now * 3.1) * 0.3); mix('aLx', -0.5);
+    T.mouth = lerp(1, 0.6 + Math.abs(Math.sin(now * 12)) * 1.1, g);
+    bounce = Math.abs(Math.sin(now * 4)) * 0.03 * g;
+  } else if (role === 'listen') {
+    mix('headNod', 0.05 + Math.sin(now * 3.2 + b.id) * 0.1); mix('aLz', -0.3); mix('aRz', 0.3);
   } else if (role === 'retract') {
     mix('aLz', -2.3); mix('aRz', 2.3); mix('aLx', -0.9); mix('aRx', -0.9); mix('headNod', 0.28);
   } else if (role === 'cheer') {
@@ -1091,7 +1284,11 @@ function updateBot(b, dt, now, focus) {
   b.torso.scale.y = 1 + Math.sin(now * 2.2 + b.id) * 0.02;
   // head looks at focus
   let lookYaw = 0;
-  const lookTarget = role === 'shocked' ? bots[state.act.botId] : (role === 'rebut' ? bots[state.act.target] : focus);
+  const lookTarget = role === 'shocked' ? bots[state.act.botId]
+    : (role === 'rebut' || role === 'address') ? bots[state.act.target]
+    : role === 'listen' ? (state.act && state.act.target === b.id && now < state.act.until ? bots[state.act.botId] : bots[state.speakingId])
+    : role === 'think' && state.addressingId ? bots[state.addressingId]
+    : focus;
   if (lookTarget && lookTarget !== b) lookYaw = clamp(wrapAngle(Math.atan2(lookTarget.pos.x - b.pos.x, lookTarget.pos.y - b.pos.y) - b.facing), -1.15, 1.15);
   else if (role === 'idle') lookYaw = Math.sin(now * 0.4 + b.id * 1.7) * 0.5;
   c.headYaw = damp(c.headYaw, lookYaw, 5, dt);
@@ -1099,6 +1296,9 @@ function updateBot(b, dt, now, focus) {
   b.mouth.scale.set(1, c.mouth, 1);
   b.brows[0].rotation.z = -(b.browBase + c.brow * 0.5); b.brows[1].rotation.z = b.browBase + c.brow * 0.5;
   if (b.propeller) b.propeller.rotation.y += dt * (6 + speed * 20);
+  const pv = (role === 'voted' || role === 'vote') ? (state.vote.byId.get(b.id)?.vote || (role === 'vote' ? state.act?.msg?.voteN : null)) : null;
+  b.paddle.visible = !!pv && b.gBlend > 0.3;
+  if (b.paddle.visible) { b.paddleFace.material = PADDLE[pv] || PADDLE.abstain; b.paddle.scale.setScalar(clamp((b.gBlend - 0.3) / 0.5, 0.01, 1)); }
   b.headTopY = y + sitY + 1.48;
 }
 
