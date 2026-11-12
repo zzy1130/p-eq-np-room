@@ -1,19 +1,19 @@
 {
   "round": 2,
-  "speaking": "定稿人(表决)",
-  "since": "2026-11-12T19:20:04+08:00",
-  "calls": 31,
+  "speaking": "定稿人",
+  "since": "2026-11-12T19:20:28+08:00",
+  "calls": 32,
   "r429": 0,
   "session": "pnp-20261112",
   "topic": "证明 P=NP",
-  "state": "running",
-  "consensus": false,
-  "consensus_text": null,
+  "state": "consensus",
+  "consensus": true,
+  "consensus_text": "本会话至第2轮未证明 P=NP：仅 C3（分量分解正确性引理）通过、C4（输入位长规模标准）作为规约约定保留，C2/C5/C6 均退回，卡在无法证明一般 3-SAT 可多项式归约为对数宽度/低树宽实例（枚举代价 2^{w_i} 缺乏位长级多项式界），且 O(n_vars) 完整赋值输出破坏位长多项式性。",
   "votes": {
     "round": 2,
-    "agree": 9,
+    "agree": 10,
     "disagree": 0,
     "conclusion": "本会话至第2轮未证明 P=NP：仅 C3（分量分解正确性引理）通过、C4（输入位长规模标准）作为规约约定保留，C2/C5/C6 均退回，卡在无法证明一般 3-SAT 可多项式归约为对数宽度/低树宽实例（枚举代价 2^{w_i} 缺乏位长级多项式界），且 O(n_vars) 完整赋值输出破坏位长多项式性。"
   },
-  "addressing": 1
+  "addressing": null
 }
