@@ -160,6 +160,8 @@ function fitCamera(initial) {
   const aspect = innerWidth / innerHeight;
   camera.fov = aspect < 0.8 ? 52 : 40;
   camera.aspect = aspect;
+  if (aspect < 0.8) camera.setViewOffset(innerWidth, innerHeight, 0, -innerHeight * 0.1, innerWidth, innerHeight);
+  else camera.clearViewOffset();
   camera.updateProjectionMatrix();
   if (initial) {
     const vt = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
@@ -697,7 +699,7 @@ function normalizeMessages(raw, wantSession) {
       ts: m.ts ?? m.time ?? '', round: m.round ?? '', id, role: role || ('角色 ' + id), type,
       text: typeof m.text === 'string' ? m.text : (m.text == null ? str(m.content) : JSON.stringify(m.text)),
       session: m.session != null ? String(m.session) : null, replyTo,
-      short: str(m.short), position: str(m.position), conclusion: str(m.conclusion),
+      short: plain(str(m.short), 200), position: plain(str(m.position), 400), conclusion: str(m.conclusion),
       vote: m.vote, voteN: normVote(m.vote), ballot: m.is_ballot === true || type === 'proposal',
     });
   }
