@@ -143,7 +143,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .tl-item .av { width: 28px; height: 28px; border-radius: 50%; background: var(--c); color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 800; }
 .tl-item .hd { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: 12.5px; }
 .tl-item .hd b { font-size: 13.5px; }
-.tl-item .hd .t { color: var(--muted); font-size: 11.5px; margin-left: auto; }
+.tl-item { position: relative; }
+.tl-item .hd { padding-right: 60px; }
+.tl-item .hd .t { color: var(--muted); font-size: 11.5px; position: absolute; right: 8px; top: 10px; }
 .tl-item .sm { font-size: 14px; font-weight: 650; margin: 3px 0 0; line-height: 1.45; }
 .tl-item .tx { font-size: 13.5px; line-height: 1.65; color: #4a3f37; margin-top: 4px; display: none; word-break: break-word; }
 .tl-item.open .tx { display: block; }
