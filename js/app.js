@@ -437,6 +437,7 @@ function openSession(sid) {
       const t = setTimeout(() => { if (!opened) { Net.wsFails = (Net.wsFails || 0) + 1; try { ws.close(); } catch {} resolve(false); } }, 6000);
       ws.onopen = () => { opened = true; clearTimeout(t); Net.transport = 'WebSocket'; Net.wsFails = 0; setConn('live', '实时·WS', '实时通道（WebSocket）：' + Net.base); };
       ws.onmessage = (e) => {
+        if (S.closed) { try { ws.close(); } catch {} return; }
         let ev; try { ev = JSON.parse(e.data); } catch { return; }
         const d = ev.data;
         if (ev.type === 'msg') applyIncoming({ messages: [d] });
@@ -872,7 +873,7 @@ function openSession(sid) {
   }
 
   function close() {
-    S.closed = true; pollAbort?.abort(); clearTimeout(playTimer); clearInterval(uiTimer); clearTimeout(snapTimer);
+    S.closed = true; pollAbort?.abort(); try { S.ws?.close(); } catch {}   // old session's WebSocket must not keep driving the shared stage clearTimeout(playTimer); clearInterval(uiTimer); clearTimeout(snapTimer);
     $('verdict').classList.remove('on'); $('drawer').classList.add('hidden');
   }
   setTab('tl');
