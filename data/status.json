@@ -1,8 +1,8 @@
 {
   "round": 2,
-  "speaking": "文献核查",
-  "since": "2026-11-12T19:17:57+08:00",
-  "calls": 19,
+  "speaking": "协调者(表决)",
+  "since": "2026-11-12T19:18:46+08:00",
+  "calls": 22,
   "r429": 0,
   "session": "pnp-20261112",
   "topic": "证明 P=NP",
@@ -10,5 +10,5 @@
   "consensus": false,
   "consensus_text": null,
   "votes": null,
-  "addressing": null
+  "addressing": 1
 }
