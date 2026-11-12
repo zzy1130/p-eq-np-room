@@ -91,7 +91,7 @@ function noteFailure() {
   Net.fails++;
   if (Net.fails >= 3 && Net.mode === 'live') { Net.fails = 0; discover(); }
 }
-setInterval(() => { if (Net.mode === 'snap') discover().then((ok) => ok && route(true)); }, 20000);
+setInterval(() => { if (Net.mode === 'snap') discover().then((ok) => ok && route(true)); }, 10000);
 function recordLatency(m) {
   if (!m.ts_ms) return;
   const lat = Date.now() - m.ts_ms;
@@ -497,13 +497,14 @@ function openSession(sid) {
   }
   function renderFormat() {
     const t = S.topic || {}; const ph = t.phases || []; const st = S.status;
-    const cur = S.cursor >= S.msgs.length && running() ? st.phase_idx : ph.findIndex((p) => p.key === S.msgs[S.cursor - 1]?.phase);
+    let cur = S.cursor >= S.msgs.length && running() ? st.phase_idx : ph.findIndex((p) => p.key === S.msgs[S.cursor - 1]?.phase);
+    if (S.msgs[S.cursor - 1]?.phase === 'JUDGE' || (S.verdict && S.cursor >= S.msgs.length)) cur = ph.length;
     $('pane').innerHTML = `<div class="fmt"><h3>${esc(t.format_name || 'Policy 辩论（简化版）')}</h3>
       <p>采用美式 <b>Policy 辩论</b>的结构并压缩为正反各 2 人：先立论、后质询（cross-examination），再驳论与总结；<b>正方最后发言</b>（与 Policy 惯例一致）。正方支持辩题，反方反对。</p>
       <ol class="phase-list">${ph.map((p, i) => `<li class="${i < cur ? 'done' : i === cur ? 'cur' : ''}"><span>${esc(p.label)}</span><span class="lm">${p.kind === 'cx' ? `${p.rounds} 问 · 问≤${p.q_chars} 答≤${p.a_chars} 字` : `≤${p.chars} 字`} · ${fmtClock(p.secs)}</span></li>`).join('')}
-        <li class="${S.verdict ? 'done' : st.state === 'judging' ? 'cur' : ''}"><span>裁判评议与宣判</span><span class="lm">${esc(st.judge_backend || S.verdict?.backend || '')}</span></li></ol>
+        <li class="${S.verdict && cur >= ph.length ? 'done' : st.state === 'judging' ? 'cur' : ''}"><span>裁判评议与宣判</span><span class="lm">${esc(st.judge_backend || S.verdict?.backend || '')}</span></li></ol>
       <h3>严格计时 / 限字</h3>
-      <p>每个环节都有字数上限和发言时限（计时牌倒计时）。超出字数的部分<b>硬截断</b>并标注「超字截断」；模型在时限内没交出发言，该发言<b>作废</b>。质询的所有问答共享一个总时限，时间到即结束。违规会进入裁判「规则」分项扣分。</p>
+      <p>每个环节都有字数上限和发言时限（计时牌倒计时）。超出字数的部分<b>硬截断</b>并标注「超字截断」；模型在时限内没交出发言，该发言<b>作废</b>。质询的所有问答共享一个总时限，时间到即结束。违规会进入裁判「规则」分项扣分。等待上游模型（限流/额度/出错重试）的时间<b>不计入</b>发言时间，计时牌显示 ⏸。</p>
       <h3>裁判</h3>
       <p>可插拔裁判接口：默认调用本机 <b>Claude Code CLI</b>（<code>claude -p</code>，附评分量表）；若服务器设置了 <code>GEMINI_API_KEY</code> 则改用 <b>Gemini API</b>。不使用 Antigravity。量表五项各 10 分：论证、证据、交锋、质询、规则；另给辩手分（26–30）。按 flow 判，未回应的论点视为成立。</p></div>`;
   }

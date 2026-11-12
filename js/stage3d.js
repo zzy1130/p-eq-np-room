@@ -365,7 +365,7 @@ export function createStage(container, overlayRoot, opts = {}) {
     scene.remove(world);
     world.traverse((o) => { if (o.geometry && !Object.values(G).includes(o.geometry)) o.geometry.dispose?.(); });
     world = new THREE.Group(); scene.add(world);
-    for (const b of bots.values()) scene.remove(b.root);
+    for (const b of bots.values()) { scene.remove(b.root); if (b.paddle) { scene.remove(b.paddle); b.paddle.material.dispose(); } }
     bots = new Map();
     overlayRoot.innerHTML = '';
     overlay = new Map();
