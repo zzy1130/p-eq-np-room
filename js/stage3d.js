@@ -522,7 +522,7 @@ export function createStage(container, overlayRoot, opts = {}) {
   function placeCamera() {
     const aspect = camera.aspect;
     const vt = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-    const half = layout.mode === 'debate' ? 6.9 : layout.radius + 0.3;
+    const half = layout.mode === 'debate' ? (aspect < 1 ? 5.9 : 6.9) : layout.radius + 0.3;
     const dist = clamp(Math.max(half / (vt * aspect), (layout.mode === 'debate' ? 4.6 : 3.8) / vt), 7, 26);
     const dir = layout.mode === 'debate' ? new THREE.Vector3(0, 0.36, 1).normalize() : new THREE.Vector3(0, 0.55, 1).normalize();
     camera.position.copy(controls.target).addScaledVector(dir, dist);
@@ -868,6 +868,10 @@ export function createStage(container, overlayRoot, opts = {}) {
     const bubbles = (f.bubbles || []).filter((bb) => bots.has(bb.id));
     const want = new Map(bubbles.map((bb, i) => [bb.id, { ...bb, prio: i }]));
     placed.length = 0;
+    // reserved screen areas (HUD cards, replay bar) — bubbles must not cover them
+    if (!layoutOverlay.res || ++layoutOverlay.n % 15 === 0) layoutOverlay.res = opts.reserved?.() || [];
+    layoutOverlay.n = layoutOverlay.n || 0;
+    for (const r of layoutOverlay.res) placed.push(r);
     const order = pts.filter((p) => want.has(p.id) && p.vis).sort((a, b) => want.get(a.id).prio - want.get(b.id).prio);
     for (const p of pts) {
       if (!want.has(p.id) || !p.vis) { if (p.o.shown) { p.o.bubble.classList.remove('show'); p.o.shown = false; } }

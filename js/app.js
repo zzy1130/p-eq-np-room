@@ -45,7 +45,7 @@ async function fetchJSON(url, { timeout = 8000, signal, ...opt } = {}) {
 }
 async function probe(base) {
   if (!base || !/^https?:\/\//.test(base)) throw new Error('bad');
-  const j = await fetchJSON(base.replace(/\/$/, '') + '/api/health', { timeout: 5000 });
+  const j = await fetchJSON(base.replace(/\/$/, '') + '/api/health', { timeout: 8000 });
   if (!j.ok) throw new Error('unhealthy');
   return base.replace(/\/$/, '');
 }
@@ -58,8 +58,9 @@ function setConn(mode, text, title) {
   Net.mode = mode;
   const c = $('conn'); c.className = 'conn ' + mode; c.querySelector('span').textContent = text; c.title = title || '';
   const b = $('banner');
-  if (mode === 'snap') { b.textContent = '实时通道暂时连不上，已切换到快照模式（约每分钟更新，可能有 1–2 分钟延迟）。正在后台自动重连…'; b.classList.remove('hidden'); }
+  if (mode === 'snap') { b.textContent = IS_MOBILE ? '实时通道连不上，已切到快照模式（约 1 分钟延迟），自动重连中…' : '实时通道暂时连不上，已切换到快照模式（约每分钟更新，可能有 1–2 分钟延迟）。正在后台自动重连…'; b.classList.remove('hidden'); }
   else b.classList.add('hidden');
+  document.body.classList.toggle('banner-on', mode === 'snap');
   $('newBtn').disabled = $('newBtn2').disabled = mode === 'snap';
 }
 async function discover() {
@@ -74,7 +75,10 @@ async function discover() {
     tries.push(tunnelFromApi().then(probe));
     tries.push(tunnelFromPages().then(probe));
     try {
-      const base = await Promise.any(tries);
+      const base = await Promise.any(tries).catch(async () => {   // one quick retry before giving up
+        await sleep(1500);
+        return Promise.any([tunnelFromApi().then(probe), tunnelFromPages().then(probe), ...(saved ? [probe(saved)] : [])]);
+      });
       Net.base = base; Net.fails = 0;
       localStorage.setItem('arenaBase', base);
       setConn('live', '实时', '实时通道：' + base);
@@ -224,6 +228,15 @@ function getStage() {
   if (!stage) stage = createStage($('stageHost'), $('overlay'), {
     onPickBot: (id) => current?.showRole(id),
     onPickMsg: (idx) => current?.seek(idx + 1, true),
+    reserved: () => {
+      const host = $('stageWrap').getBoundingClientRect();
+      const out = [];
+      for (const el of document.querySelectorAll('.hud-top > *, .replay, .votebar:not(.hidden), .drawer:not(.hidden)')) {
+        const r = el.getBoundingClientRect();
+        if (r.width && r.height) out.push({ x: r.left - host.left, y: r.top - host.top, w: r.width, h: r.height });
+      }
+      return out;
+    },
   });
   return stage;
 }

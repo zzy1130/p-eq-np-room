@@ -37,10 +37,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 .btn.ghost { background: transparent; color: var(--ink); box-shadow: none; border: 1px solid var(--line); }
 .btn.small { padding: 6px 11px; font-size: 13px; border-radius: 9px; }
-.banner { position: fixed; top: calc(var(--top-h) + var(--safe-t)); left: 0; right: 0; z-index: 45; padding: 7px 16px; font-size: 13px;
+.banner { position: fixed; top: calc(var(--top-h) + var(--safe-t)); left: 0; right: 0; z-index: 45; height: 34px; line-height: 20px; padding: 7px 16px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   background: #fff1d6; color: #6b4600; border-bottom: 1px solid #f0d49a; text-align: center; }
 
 /* ---------------- home ---------------- */
+.banner-on .view { top: calc(var(--top-h) + var(--safe-t) + 34px); }
 .view { position: fixed; inset: calc(var(--top-h) + var(--safe-t)) 0 0 0; }
 #home { overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .home-wrap { max-width: 1120px; margin: 0 auto; padding: 26px 18px calc(40px + var(--safe-b)); }
@@ -241,10 +242,16 @@ button { font: inherit; color: inherit; cursor: pointer; }
   #session { grid-template-columns: 1fr; grid-template-rows: minmax(260px, 50dvh) 1fr; }
   .side { border-left: 0; border-top: 1px solid var(--line); }
   .brand span.t { display: none; }
+  .titlecard { padding: 6px 10px; }
   .titlecard h2 { font-size: 14px; -webkit-line-clamp: 1; }
+  .titlecard .kicker { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
+  .titlecard .kicker > span:nth-child(n+3) { display: none; }
+  .hud-top { left: 8px; right: 8px; top: 8px; gap: 6px; }
+  .iconbtn { width: 34px; height: 34px; }
   .timer-card { min-width: 0; padding: 6px 10px; } .timer-card .clk { font-size: 20px; } .timer-card .sub { display: none; }
   .bubble { font-size: 11.5px; max-width: 46vw; padding: 5px 8px; }
   .bubble.main { max-width: 64vw; font-size: 12px; }
+  .bubble.main .bx { -webkit-line-clamp: 3; }
   .votebar { bottom: 62px; font-size: 12px; } .votebar .c { max-width: 160px; }
   .replay { padding: 6px 9px; gap: 7px; }
   .tag { font-size: 10.5px; }
