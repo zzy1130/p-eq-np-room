@@ -1,256 +1,101 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#efe3cf" />
-  <title>圆桌会议 · P ≟ NP</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍩</text></svg>" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>AI 圆桌 & 辩论厅</title>
+  <meta name="description" content="多个文心智能体实时圆桌讨论与美式辩论，Claude 裁判宣判。">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23e2653a'/><text x='16' y='22' font-size='16' text-anchor='middle' fill='white'>⚖</text></svg>">
+  <link rel="stylesheet" href="./css/app.css">
   <script type="importmap">
-  { "imports": {
-      "three": "./vendor/three/three.module.js",
-      "three/addons/": "./vendor/three/addons/"
-  } }
+  { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
   </script>
-  <style>
-    :root {
-      --bg: #efe3cf;
-      --ink: #2b2420;
-      --muted: #6f6258;
-      --glass: rgba(255, 250, 242, .78);
-      --glass-dark: rgba(43, 36, 32, .86);
-      --line: rgba(60, 40, 20, .14);
-      --accent: #e0703f;
-      --claim: #3d7fe0;
-      --rebuttal: #e0483d;
-      --retract: #d79b16;
-      --summary: #23a26b;
-      --vote: #8a52d6;
-      --status: #8a7d70;
-      --safe-t: env(safe-area-inset-top, 0px);
-      --safe-b: env(safe-area-inset-bottom, 0px);
-    }
-    * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; overflow: hidden; color: var(--ink);
-      background: radial-gradient(120% 90% at 50% 30%, #fbf3e6 0%, #efe3cf 55%, #e2d0b4 100%);
-      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
-        "Noto Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
-      -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
-    button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
-    a { color: var(--accent); }
-    #stage { position: fixed; inset: 0; }
-    #stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
-
-    /* ---------- in-world overlay ---------- */
-    #overlay { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
-    .anchor { position: absolute; left: 0; top: 0; will-change: transform; }
-    .anchor > * { position: absolute; left: 0; bottom: 0; transform: translateX(-50%); }
-    .tag { pointer-events: auto; cursor: pointer; white-space: nowrap; font-size: 11.5px; font-weight: 700;
-      padding: 1px 8px 2px; border-radius: 999px; color: #fff; background: var(--c, #555);
-      box-shadow: 0 2px 0 rgba(0,0,0,.18), 0 3px 10px rgba(0,0,0,.12); border: 2px solid #fff; }
-    .think { bottom: 24px; display: none; gap: 4px; padding: 5px 9px; border-radius: 999px;
-      background: #fff; box-shadow: 0 3px 10px rgba(0,0,0,.15); }
-    .think.on { display: flex; }
-    .think i { width: 7px; height: 7px; border-radius: 50%; background: #6f6258; animation: hop 1.1s infinite ease-in-out; }
-    .think i:nth-child(2) { animation-delay: .15s; } .think i:nth-child(3) { animation-delay: .3s; }
-    @keyframes hop { 0%, 60%, 100% { transform: translateY(0); opacity: .45 } 30% { transform: translateY(-5px); opacity: 1 } }
-    .bubble { pointer-events: auto; cursor: pointer; bottom: 26px; width: max-content; max-width: min(230px, 46vw);
-      background: #fff; color: var(--ink); border-radius: 14px; padding: 7px 10px 8px; font-size: 12.5px; line-height: 1.4;
-      border: 2.5px solid var(--tc, #888); box-shadow: 0 6px 18px rgba(60,30,10,.18);
-      transform-origin: 50% 100%; transform: translateX(-50%) scale(var(--s, 1)); opacity: var(--o, 1);
-      transition: opacity .4s; display: none; }
-    .bubble.on { display: block; animation: pop .45s cubic-bezier(.3,1.6,.5,1); }
-    .bubble::after { content: ""; position: absolute; left: 50%; bottom: -9px; width: 12px; height: 12px; margin-left: -6px;
-      background: #fff; border-right: 2.5px solid var(--tc, #888); border-bottom: 2.5px solid var(--tc, #888); transform: rotate(45deg); }
-    .bubble.with-think { bottom: 58px; }
-    .bubble .bt { display: inline-block; font-size: 10.5px; font-weight: 800; color: #fff; background: var(--tc, #888);
-      border-radius: 6px; padding: 0 5px; margin-right: 5px; vertical-align: 1px; }
-    .bubble .bx { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-    @keyframes pop { from { transform: translateX(-50%) scale(.3); opacity: 0 } }
-
-    /* ---------- HUD ---------- */
-    .hud { position: fixed; left: 0; right: 0; top: 0; padding: calc(10px + var(--safe-t)) 12px 0; pointer-events: none;
-      display: flex; flex-direction: column; align-items: center; gap: 8px; }
-    .hud > * { pointer-events: auto; }
-    .titlebar { display: flex; align-items: center; gap: 10px; background: var(--glass); backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 18px; padding: 6px 8px 6px 14px;
-      box-shadow: 0 6px 24px rgba(80,50,20,.12); max-width: 100%; }
-    .titlebar h1 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: .01em; white-space: nowrap;
-      overflow: hidden; text-overflow: ellipsis; max-width: 42vw; }
-    .titlebar .live { width: 8px; height: 8px; border-radius: 50%; background: #2fbf71; box-shadow: 0 0 0 0 rgba(47,191,113,.6);
-      animation: pulse 2s infinite; flex: none; }
-    .titlebar .live.stale { background: #c9a43a; animation: none; }
-    @keyframes pulse { 70% { box-shadow: 0 0 0 8px rgba(47,191,113,0) } 100% { box-shadow: 0 0 0 0 rgba(47,191,113,0) } }
-    .actions { display: flex; gap: 4px; }
-    .btn { padding: 5px 10px; border-radius: 12px; font-weight: 700; font-size: 13px; background: rgba(255,255,255,.7);
-      border: 1px solid var(--line); text-decoration: none; color: var(--ink); white-space: nowrap; }
-    .btn:hover { background: #fff; }
-    .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: 760px; }
-    .chip { background: var(--glass); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--line);
-      padding: 3px 10px; border-radius: 999px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
-    .chip b { color: var(--ink); font-weight: 800; }
-    .chip.speak b { color: var(--accent); }
-    .chip.bad b { color: var(--rebuttal); }
-    .chip.good { background: #2fbf71; color: #fff; border-color: transparent; } .chip.good b { color: #fff; }
-    .votebar { display: none; align-items: center; gap: 10px; padding: 5px 14px; border-radius: 999px; background: var(--glass);
-      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--line); box-shadow: 0 4px 16px rgba(80,50,20,.1);
-      font-size: 13px; font-weight: 700; }
-    .votebar.on { display: flex; animation: pop .5s cubic-bezier(.3,1.6,.5,1); }
-    .votebar .bar { display: flex; width: clamp(90px, 24vw, 220px); height: 12px; border-radius: 999px; overflow: hidden; background: #e6dccd; gap: 2px; }
-    .votebar .bar i { flex: 0 0 auto; flex-basis: 0; flex-grow: 0; transition: flex-grow .6s; min-width: 0; }
-    .votebar .a { background: #23a26b; } .votebar .d { background: #e0483d; } .votebar .x { background: #8a7d70; } .votebar .p { background: repeating-linear-gradient(45deg, #d8ccba 0 4px, #e6dccd 4px 8px); }
-    .votebar .vtx { display: flex; gap: 8px; white-space: nowrap; color: var(--muted); }
-    .votebar .ga { color: #23a26b; } .votebar .gd { color: #e0483d; }
-    .tag .vb { display: inline-block; width: 15px; height: 15px; line-height: 15px; text-align: center; border-radius: 50%; color: #fff;
-      font-size: 10px; margin: 0 4px 0 -4px; border: 1.5px solid #fff; }
-    .bubble .to { font-size: 11px; font-weight: 800; color: var(--tc, #888); margin-right: 3px; }
-    .short { margin: 8px 0 2px; padding: 6px 10px; background: rgba(0,0,0,.035); border-left: 4px solid var(--tc, #aaa); border-radius: 0 8px 8px 0; font-weight: 600; }
-    .hint { position: fixed; left: 50%; bottom: calc(12px + var(--safe-b)); transform: translateX(-50%); font-size: 12px;
-      color: var(--muted); background: var(--glass); padding: 3px 12px; border-radius: 999px; pointer-events: none; white-space: nowrap;
-      transition: opacity 1s; }
-
-    .consensus { position: relative; transform: translateY(-20px) scale(.9); opacity: 0; pointer-events: none; visibility: hidden;
-      text-align: center; padding: 10px 40px 12px; border-radius: 20px; color: #fff; width: min(760px, 94vw); cursor: pointer;
-      background: linear-gradient(135deg, #2fbf71, #1f9d8f); box-shadow: 0 14px 40px rgba(20,90,60,.3), inset 0 0 0 3px rgba(255,255,255,.4);
-      transition: all .6s cubic-bezier(.3,1.4,.5,1); }
-    .consensus.on { opacity: 1; transform: none; pointer-events: auto; visibility: visible; }
-    .consensus strong { display: block; font-size: clamp(24px, 5.5vw, 38px); letter-spacing: .14em; line-height: 1.2; text-shadow: 0 3px 0 rgba(0,0,0,.15); }
-    .consensus div { margin-top: 4px; font-size: 14px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-    .consensus div p { margin: 0; }
-    .consensus.full div { display: block; -webkit-line-clamp: unset; max-height: 50vh; overflow: auto; }
-    .consensus .x { position: absolute; right: 8px; top: 4px; color: #fff; font-size: 22px; opacity: .8; }
-
-    /* ---------- drawer / panel ---------- */
-    .sheet { position: fixed; z-index: 5; background: rgba(255, 251, 245, .97); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-      box-shadow: 0 10px 50px rgba(60,30,10,.25); display: flex; flex-direction: column; transition: transform .35s cubic-bezier(.2,.9,.3,1); }
-    .drawer { left: 12px; top: 12px; bottom: 12px; width: min(400px, calc(100vw - 24px)); border-radius: 20px; transform: translateX(-110%); }
-    .drawer.on { transform: none; }
-    .panel { right: 12px; top: 12px; bottom: 12px; width: min(520px, calc(100vw - 24px)); border-radius: 20px; transform: translateX(110%); }
-    .panel.on { transform: none; }
-    .sheet header { display: flex; align-items: center; gap: 8px; padding: 12px 12px 10px 16px; border-bottom: 1px solid var(--line); }
-    .sheet header .grow { flex: 1; min-width: 0; }
-    .sheet .x { font-size: 24px; line-height: 1; width: 34px; height: 34px; border-radius: 50%; color: var(--muted); }
-    .sheet .x:hover { background: rgba(0,0,0,.06); }
-    .tabs { display: flex; gap: 4px; background: rgba(0,0,0,.05); padding: 3px; border-radius: 12px; }
-    .tabs button { padding: 4px 14px; border-radius: 9px; font-weight: 700; color: var(--muted); }
-    .tabs button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
-    .scroll { flex: 1; overflow: auto; padding: 12px 16px 24px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
-    .item { display: block; width: 100%; text-align: left; padding: 9px 11px; margin-bottom: 8px; border-radius: 12px; background: #fff;
-      border: 1px solid var(--line); border-left: 5px solid var(--tc, #aaa); }
-    .item:hover { box-shadow: 0 3px 12px rgba(0,0,0,.08); }
-    .item .meta { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
-    .item .who { font-weight: 800; color: var(--ink); }
-    .item .pv { font-size: 13px; color: #4a3f38; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-    .ty { font-size: 10.5px; font-weight: 800; color: #fff; background: var(--tc, #888); border-radius: 6px; padding: 0 6px; }
-    .roundsep { text-align: center; font-size: 12px; font-weight: 800; color: var(--muted); margin: 14px 0 8px; letter-spacing: .1em; }
-    .who-head { display: flex; align-items: center; gap: 10px; }
-    .dot { width: 30px; height: 30px; border-radius: 50%; flex: none; background: var(--c, #888); border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
-    .who-head h2 { margin: 0; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .who-head small { color: var(--muted); }
-    .md { font-size: 14px; line-height: 1.65; word-wrap: break-word; overflow-wrap: anywhere; }
-    .md h1, .md h2, .md h3, .md h4 { margin: 1em 0 .4em; line-height: 1.3; } .md h1 { font-size: 1.3em } .md h2 { font-size: 1.15em } .md h3, .md h4 { font-size: 1.02em }
-    .md p { margin: .55em 0; } .md ul, .md ol { padding-left: 1.4em; margin: .4em 0; }
-    .md code { background: rgba(0,0,0,.06); padding: 1px 5px; border-radius: 5px; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .md pre { background: #2b2420; color: #f5ebdd; padding: 10px 12px; border-radius: 10px; overflow: auto; }
-    .md pre code { background: none; padding: 0; color: inherit; }
-    .md blockquote { margin: .6em 0; padding: 4px 12px; border-left: 4px solid var(--accent); background: rgba(224,112,63,.07); border-radius: 0 8px 8px 0; }
-    .md table { border-collapse: collapse; font-size: 13px; display: block; overflow: auto; }
-    .md td, .md th { border: 1px solid var(--line); padding: 4px 8px; }
-    .md hr { border: 0; border-top: 1px dashed var(--line); }
-    .msgcard { background: #fff; border: 1px solid var(--line); border-top: 5px solid var(--tc, #aaa); border-radius: 14px; padding: 10px 14px; }
-    .msgcard .meta { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    details.hist { margin-top: 8px; background: #fff; border: 1px solid var(--line); border-left: 5px solid var(--tc, #aaa); border-radius: 12px; }
-    details.hist summary { cursor: pointer; padding: 8px 10px; font-size: 13px; list-style: none; }
-    details.hist summary::-webkit-details-marker { display: none; }
-    details.hist .md { padding: 0 12px 10px; border-top: 1px dashed var(--line); }
-    details.hist[open] { box-shadow: 0 3px 12px rgba(0,0,0,.06); }
-    .sec { margin: 18px 0 6px; font-weight: 800; color: var(--muted); font-size: 12.5px; letter-spacing: .08em; }
-    .empty { color: var(--muted); text-align: center; padding: 40px 10px; }
-
-    .loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
-      background: var(--bg); z-index: 10; transition: opacity .6s; color: var(--muted); font-weight: 700; }
-    .loading.off { opacity: 0; pointer-events: none; }
-    .loading .ring { width: 46px; height: 46px; border-radius: 50%; border: 5px solid rgba(224,112,63,.2); border-top-color: var(--accent);
-      animation: spin 1s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg) } }
-    .err { position: fixed; left: 50%; bottom: 44px; transform: translateX(-50%); background: #b3412f; color: #fff; padding: 6px 14px;
-      border-radius: 10px; font-size: 13px; display: none; z-index: 6; }
-
-    @media (max-width: 640px) {
-      .titlebar h1 { font-size: 14px; max-width: 38vw; }
-      .btn { padding: 4px 8px; font-size: 12px; }
-      .chip { font-size: 11.5px; padding: 2px 8px; }
-      .tag { font-size: 10px; padding: 0 6px 1px; }
-      .bubble { font-size: 11.5px; max-width: 42vw; padding: 5px 8px 6px; }
-      .drawer, .panel { left: 0; right: 0; top: auto; bottom: 0; width: 100%; height: 78vh; border-radius: 20px 20px 0 0;
-        transform: translateY(105%); padding-bottom: var(--safe-b); }
-      .drawer.on, .panel.on { transform: none; }
-      .hint { display: none; }
-      .votebar { padding: 4px 10px; font-size: 12px; gap: 6px; }
-      .consensus { padding: 8px 34px 10px; }
-      .consensus div { font-size: 13px; }
-    }
-  </style>
 </head>
 <body>
-  <div id="stage"></div>
-  <div id="overlay"></div>
+  <header class="topbar">
+    <a class="brand" href="#/"><span class="logo">⚖</span><span class="t">AI 圆桌 &amp; 辩论厅</span></a>
+    <span class="grow"></span>
+    <span id="conn" class="conn connecting" title="正在连接实时通道"><i></i><span>连接中…</span></span>
+    <button id="newBtn" class="btn small">＋ 发起</button>
+  </header>
+  <div id="banner" class="banner hidden"></div>
 
-  <div class="hud">
-    <div class="titlebar">
-      <span class="live" id="live" title="数据同步状态"></span>
-      <h1 id="topic">P ≟ NP 圆桌会议</h1>
-      <div class="actions">
-        <button class="btn" id="btnLog">💬 时间线</button>
-        <button class="btn" id="btnFinal">📜 终稿</button>
-        <a class="btn" href="./classic.html" title="旧版文字界面">经典版</a>
+  <main id="home" class="view">
+    <div class="home-wrap">
+      <section class="hero">
+        <div>
+          <h1>AI 圆桌 &amp; 辩论厅</h1>
+          <p>文心 ERNIE 智能体分角色实时讨论或按 Policy 赛制辩论。每个角色带有来自高星开源仓库的 skill 与 AGENTS.md；辩论由可插拔裁判（默认 Claude Code CLI）按量表评分并宣判。</p>
+        </div>
+        <button id="newBtn2" class="btn">＋ 发起新场次</button>
+      </section>
+      <div class="filters" id="filters">
+        <button class="chip-btn on" data-f="all">全部</button>
+        <button class="chip-btn" data-f="debate">美式辩论</button>
+        <button class="chip-btn" data-f="roundtable">圆桌讨论</button>
+        <button class="chip-btn" data-f="running">进行中</button>
       </div>
+      <div id="cards" class="cards"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
     </div>
-    <div class="chips">
-      <span class="chip">轮次 <b id="st-round">—</b></span>
-      <span class="chip speak">发言中 <b id="st-speak">等待开场</b></span>
-      <span class="chip">调用 <b id="st-calls">0</b></span>
-      <span class="chip" id="chip-429">429 <b id="st-429">0</b></span>
-      <span class="chip" id="chip-cons">共识 <b id="st-cons">未达成</b></span>
-      <span class="chip" id="chip-state" style="display:none">状态 <b id="st-state"></b></span>
-      <span class="chip">消息 <b id="st-msgs">0</b></span>
-    </div>
-    <button class="votebar" id="votebar" title="表决"><span class="vt">✋ 表决</span>
-      <span class="bar"><i id="vb-a" class="a"></i><i id="vb-d" class="d"></i><i id="vb-x" class="x"></i><i id="vb-p" class="p"></i></span>
-      <span class="vtx" id="vb-txt"></span></button>
-    <div class="consensus" id="consensus">
-      <button class="x" id="closeCons" aria-label="关闭">×</button>
-      <strong>🎉 达成共识</strong>
-      <div id="consensus-text" title="点击展开/收起"></div>
-    </div>
+  </main>
+
+  <main id="session" class="view hidden">
+    <section id="stageWrap" class="stage-wrap">
+      <div id="stageHost" class="stage-host"></div>
+      <div id="overlay" class="overlay"></div>
+      <div class="hud-top">
+        <a class="iconbtn" href="#/" title="返回场次列表" aria-label="返回">←</a>
+        <div class="titlecard glass">
+          <div class="kicker" id="kicker"></div>
+          <h2 id="sTitle">加载中…</h2>
+        </div>
+        <div id="timerCard" class="timer-card glass hidden">
+          <div class="ph" id="tPh"></div><div class="clk" id="tClk">--:--</div><div class="sub" id="tSub"></div>
+        </div>
+      </div>
+      <div id="votebar" class="votebar glass hidden"></div>
+      <div id="drawer" class="drawer glass hidden"></div>
+      <div class="replay glass">
+        <button id="playBtn" class="iconbtn" style="width:34px;height:34px;font-size:15px" title="从头回放 / 暂停" aria-label="回放">▶</button>
+        <input id="scrub" type="range" min="0" max="0" value="0" aria-label="时间轴">
+        <span id="pos" class="pos">0/0</span>
+        <button id="liveBtn" class="live-btn" title="跳到最新">直播</button>
+      </div>
+      <div id="verdict" class="verdict"><div class="confetti" id="confetti"></div><div class="vbox" id="vbox"></div></div>
+    </section>
+    <aside class="side">
+      <nav class="tabs" id="tabs">
+        <button class="tab on" data-t="tl">时间线<span class="n" id="nMsgs">0</span></button>
+        <button class="tab" data-t="roles">角色</button>
+        <button class="tab hidden" data-t="fmt" id="tabFmt">赛制</button>
+        <button class="tab hidden" data-t="verdict" id="tabVerdict">判决</button>
+        <button class="tab" data-t="final">终稿</button>
+      </nav>
+      <div class="pane" id="pane"></div>
+    </aside>
+  </main>
+
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <form class="mbox" id="form" autocomplete="off">
+      <h2 id="mTitle">发起新场次</h2>
+      <p class="sub">提交后由文心「分配官」（一次 ERNIE 调用）决定开几个 bot、各自角色与 skill，然后立即开场。全程实时直播。</p>
+      <div class="seg">
+        <label><input type="radio" name="mode" value="debate" checked><b>🎤 美式辩论</b><span>Policy 简化赛制：正反各 2 人，立论→质询→驳论→总结，裁判宣判</span></label>
+        <label><input type="radio" name="mode" value="roundtable"><b>🪑 圆桌讨论</b><span>3–8 个角色轮流发言，每轮表决，直到达成共识或轮数用完</span></label>
+      </div>
+      <label class="field"><span id="topicLabel">辩题（正方支持此命题）</span>
+        <input name="topic" id="fTopic" maxlength="120" required placeholder="例如：应当禁止宠物猫外出"></label>
+      <label class="field"><span>补充说明（可选）</span>
+        <textarea name="notes" rows="2" maxlength="500" placeholder="背景、限定范围、希望关注的角度…"></textarea></label>
+      <label class="field"><span>口令</span>
+        <input name="passcode" id="fPass" type="password" required placeholder="管理员提供的提交口令" autocomplete="current-password">
+        <small><label><input type="checkbox" id="remember" checked> 在本机记住口令</label></small></label>
+      <div class="mact"><span class="merr" id="mErr"></span>
+        <button type="button" class="btn ghost" id="cancelBtn">取消</button>
+        <button type="submit" class="btn" id="submitBtn">开场</button></div>
+    </form>
   </div>
-
-  <div class="hint" id="hint">拖动旋转 · 双指缩放 · 点小人或气泡看全文</div>
-  <div class="err" id="err"></div>
-
-  <aside class="sheet drawer" id="drawer" aria-label="时间线与终稿">
-    <header>
-      <div class="grow"><div class="tabs">
-        <button class="on" data-tab="log">时间线</button>
-        <button data-tab="final">final.md</button>
-      </div></div>
-      <button class="x" id="closeDrawer" aria-label="关闭">×</button>
-    </header>
-    <div class="scroll" id="log"></div>
-    <div class="scroll md" id="finalPane" style="display:none"></div>
-  </aside>
-
-  <aside class="sheet panel" id="panel" aria-label="发言详情">
-    <header>
-      <div class="grow who-head"><span class="dot" id="panelDot"></span>
-        <div style="min-width:0"><h2 id="panelTitle">发言</h2><small id="panelSub"></small></div></div>
-      <button class="x" id="closePanel" aria-label="关闭">×</button>
-    </header>
-    <div class="scroll" id="panelBody"></div>
-  </aside>
-
-  <div class="loading" id="loading"><div class="ring"></div><div>正在摆桌子、叫小人入座…</div></div>
-  <noscript><p style="padding:20px">需要 JavaScript。也可以看 <a href="./classic.html">经典版</a>。</p></noscript>
-  <script type="module" src="./js/room.js"></script>
+  <div id="toast" class="toast hidden"></div>
+  <script type="module" src="./js/app.js"></script>
 </body>
 </html>
