@@ -3,536 +3,236 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#111418" />
-  <title>讨论室 · P ≟ NP</title>
+  <meta name="theme-color" content="#efe3cf" />
+  <title>圆桌会议 · P ≟ NP</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍩</text></svg>" />
+  <script type="importmap">
+  { "imports": {
+      "three": "./vendor/three/three.module.js",
+      "three/addons/": "./vendor/three/addons/"
+  } }
+  </script>
   <style>
     :root {
-      --bg: #111418;
-      --bg-soft: #1a1e24;
-      --bg-panel: #161a20;
-      --bg-bar: #0d1014;
-      --line: #2a3038;
-      --text: #e8eaed;
-      --muted: #8b939e;
-      --dim: #5c6570;
-      --pill: #242a32;
-      --accent: #7cb8ff;
-      --good: #6dcea0;
-      --warn: #e0b45c;
-      --bad: #e07a7a;
-      --radius: 14px;
-      --bar-h: 64px;
-      --side-w: 280px;
+      --bg: #efe3cf;
+      --ink: #2b2420;
+      --muted: #6f6258;
+      --glass: rgba(255, 250, 242, .78);
+      --glass-dark: rgba(43, 36, 32, .86);
+      --line: rgba(60, 40, 20, .14);
+      --accent: #e0703f;
+      --claim: #3d7fe0;
+      --rebuttal: #e0483d;
+      --retract: #d79b16;
+      --summary: #23a26b;
+      --vote: #8a52d6;
+      --status: #8a7d70;
+      --safe-t: env(safe-area-inset-top, 0px);
       --safe-b: env(safe-area-inset-bottom, 0px);
     }
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
-      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-        "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
-      -webkit-font-smoothing: antialiased; }
-    a { color: var(--accent); }
+    html, body { margin: 0; height: 100%; overflow: hidden; color: var(--ink);
+      background: radial-gradient(120% 90% at 50% 30%, #fbf3e6 0%, #efe3cf 55%, #e2d0b4 100%);
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+        "Noto Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+      -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
     button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+    a { color: var(--accent); }
+    #stage { position: fixed; inset: 0; }
+    #stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
-    .app { display: grid; grid-template-rows: var(--bar-h) 1fr; height: 100%; }
-    .topbar {
-      display: flex; align-items: center; gap: 16px; padding: 0 16px;
-      background: var(--bg-bar); border-bottom: 1px solid var(--line);
-      position: relative; z-index: 5;
-    }
-    .brand { display: flex; flex-direction: column; min-width: 0; flex: 0 0 auto; }
-    .brand h1 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: .02em; }
-    .brand .sub { font-size: 11px; color: var(--muted); }
-    .stats { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; overflow: hidden; flex-wrap: wrap; }
-    .chip {
-      display: inline-flex; align-items: center; gap: 6px;
-      background: var(--pill); border: 1px solid var(--line);
-      border-radius: 999px; padding: 4px 10px; font-size: 12px; color: var(--muted);
-      white-space: nowrap;
-    }
-    .chip b { color: var(--text); font-weight: 600; }
-    .chip.speak { background: #1c2a22; border-color: #2d4a3a; color: var(--good); max-width: 100%; }
-    .chip.speak b { color: var(--good); }
-    .chip.warn b { color: var(--warn); }
-    .chip.bad b { color: var(--bad); }
-    .dots { display: inline-flex; gap: 3px; align-items: center; }
-    .dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--good);
-      animation: blink 1.2s infinite ease-in-out; display: block; }
-    .dots i:nth-child(2) { animation-delay: .2s; }
-    .dots i:nth-child(3) { animation-delay: .4s; }
-    @keyframes blink { 0%, 80%, 100% { opacity: .25; transform: scale(.8); } 40% { opacity: 1; transform: scale(1); } }
-    .menu-btn { display: none; width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--line); }
-    .menu-btn:hover { background: var(--pill); }
+    /* ---------- in-world overlay ---------- */
+    #overlay { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+    .anchor { position: absolute; left: 0; top: 0; will-change: transform; }
+    .anchor > * { position: absolute; left: 0; bottom: 0; transform: translateX(-50%); }
+    .tag { pointer-events: auto; cursor: pointer; white-space: nowrap; font-size: 11.5px; font-weight: 700;
+      padding: 1px 8px 2px; border-radius: 999px; color: #fff; background: var(--c, #555);
+      box-shadow: 0 2px 0 rgba(0,0,0,.18), 0 3px 10px rgba(0,0,0,.12); border: 2px solid #fff; }
+    .think { bottom: 24px; display: none; gap: 4px; padding: 5px 9px; border-radius: 999px;
+      background: #fff; box-shadow: 0 3px 10px rgba(0,0,0,.15); }
+    .think.on { display: flex; }
+    .think i { width: 7px; height: 7px; border-radius: 50%; background: #6f6258; animation: hop 1.1s infinite ease-in-out; }
+    .think i:nth-child(2) { animation-delay: .15s; } .think i:nth-child(3) { animation-delay: .3s; }
+    @keyframes hop { 0%, 60%, 100% { transform: translateY(0); opacity: .45 } 30% { transform: translateY(-5px); opacity: 1 } }
+    .bubble { pointer-events: auto; cursor: pointer; bottom: 26px; width: max-content; max-width: min(230px, 46vw);
+      background: #fff; color: var(--ink); border-radius: 14px; padding: 7px 10px 8px; font-size: 12.5px; line-height: 1.4;
+      border: 2.5px solid var(--tc, #888); box-shadow: 0 6px 18px rgba(60,30,10,.18);
+      transform-origin: 50% 100%; transform: translateX(-50%) scale(var(--s, 1)); opacity: var(--o, 1);
+      transition: opacity .4s; display: none; }
+    .bubble.on { display: block; animation: pop .45s cubic-bezier(.3,1.6,.5,1); }
+    .bubble::after { content: ""; position: absolute; left: 50%; bottom: -9px; width: 12px; height: 12px; margin-left: -6px;
+      background: #fff; border-right: 2.5px solid var(--tc, #888); border-bottom: 2.5px solid var(--tc, #888); transform: rotate(45deg); }
+    .bubble.with-think { bottom: 58px; }
+    .bubble .bt { display: inline-block; font-size: 10.5px; font-weight: 800; color: #fff; background: var(--tc, #888);
+      border-radius: 6px; padding: 0 5px; margin-right: 5px; vertical-align: 1px; }
+    .bubble .bx { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    @keyframes pop { from { transform: translateX(-50%) scale(.3); opacity: 0 } }
 
-    .main { display: grid; grid-template-columns: 1fr var(--side-w); min-height: 0; }
-    .feed-wrap { position: relative; min-width: 0; display: flex; flex-direction: column; }
-    .feed { flex: 1; overflow-y: auto; padding: 18px 20px 80px; scroll-behavior: auto; }
-    .waiting {
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 8px; color: var(--muted); min-height: 40vh; text-align: center;
-    }
-    .waiting .pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--accent);
-      animation: blink 1.6s infinite; }
-    .dayline { text-align: center; color: var(--dim); font-size: 11px; margin: 8px 0 16px; }
+    /* ---------- HUD ---------- */
+    .hud { position: fixed; left: 0; right: 0; top: 0; padding: calc(10px + var(--safe-t)) 12px 0; pointer-events: none;
+      display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .hud > * { pointer-events: auto; }
+    .titlebar { display: flex; align-items: center; gap: 10px; background: var(--glass); backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 18px; padding: 6px 8px 6px 14px;
+      box-shadow: 0 6px 24px rgba(80,50,20,.12); max-width: 100%; }
+    .titlebar h1 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: .01em; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; max-width: 42vw; }
+    .titlebar .live { width: 8px; height: 8px; border-radius: 50%; background: #2fbf71; box-shadow: 0 0 0 0 rgba(47,191,113,.6);
+      animation: pulse 2s infinite; flex: none; }
+    .titlebar .live.stale { background: #c9a43a; animation: none; }
+    @keyframes pulse { 70% { box-shadow: 0 0 0 8px rgba(47,191,113,0) } 100% { box-shadow: 0 0 0 0 rgba(47,191,113,0) } }
+    .actions { display: flex; gap: 4px; }
+    .btn { padding: 5px 10px; border-radius: 12px; font-weight: 700; font-size: 13px; background: rgba(255,255,255,.7);
+      border: 1px solid var(--line); text-decoration: none; color: var(--ink); white-space: nowrap; }
+    .btn:hover { background: #fff; }
+    .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: 760px; }
+    .chip { background: var(--glass); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--line);
+      padding: 3px 10px; border-radius: 999px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+    .chip b { color: var(--ink); font-weight: 800; }
+    .chip.speak b { color: var(--accent); }
+    .chip.bad b { color: var(--rebuttal); }
+    .chip.good { background: #2fbf71; color: #fff; border-color: transparent; } .chip.good b { color: #fff; }
+    .hint { position: fixed; left: 50%; bottom: calc(12px + var(--safe-b)); transform: translateX(-50%); font-size: 12px;
+      color: var(--muted); background: var(--glass); padding: 3px 12px; border-radius: 999px; pointer-events: none; white-space: nowrap;
+      transition: opacity 1s; }
 
-    .msg { display: flex; gap: 10px; margin: 0 0 14px; align-items: flex-start; animation: in .25s ease; }
-    @keyframes in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-    .av {
-      flex: 0 0 34px; width: 34px; height: 34px; border-radius: 10px;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700; font-size: 14px; color: #fff; letter-spacing: 0;
-    }
-    .bubble { min-width: 0; max-width: min(720px, 92%); }
-    .meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px; margin: 0 0 4px; }
-    .who { font-weight: 650; font-size: 13px; }
-    .when, .rnd { font-size: 11px; color: var(--dim); }
-    .tag {
-      font-size: 10px; font-weight: 650; letter-spacing: .04em;
-      border-radius: 999px; padding: 1px 7px; border: 1px solid transparent;
-    }
-    .tag.claim { color: #9ec4ff; background: #1a2434; border-color: #2a3c58; }
-    .tag.rebuttal { color: #f0a8a8; background: #2a1b1b; border-color: #4a2a2a; }
-    .tag.retract { color: #c8b48a; background: #2a2518; border-color: #4a4030; }
-    .tag.summary { color: #a8e0c4; background: #1a2a22; border-color: #2a4a3a; }
-    .tag.status { color: var(--muted); background: var(--pill); border-color: var(--line); }
-    .body {
-      background: var(--bg-soft); border: 1px solid var(--line);
-      border-radius: 4px 14px 14px 14px; padding: 10px 12px;
-      white-space: pre-wrap; word-break: break-word; font-size: 14.5px;
-    }
-    .body p { margin: 0 0 .6em; } .body p:last-child { margin: 0; }
-    .body code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 12.5px; background: #0d1014; padding: 1px 5px; border-radius: 4px; }
-    .body pre { background: #0d1014; border: 1px solid var(--line); border-radius: 8px;
-      padding: 10px 12px; overflow-x: auto; margin: .6em 0; }
-    .body pre code { background: none; padding: 0; }
-    .msg.rebuttal .body { border-color: #4a2a2a; }
-    .msg.retract .body { opacity: .85; }
-    .msg.summary .body { border-color: #2a4a3a; }
+    .consensus { position: fixed; left: 50%; top: calc(96px + var(--safe-t)); transform: translate(-50%, -20px) scale(.9); opacity: 0; pointer-events: none;
+      text-align: center; padding: 10px 40px 12px; border-radius: 20px; color: #fff; width: min(760px, 94vw); cursor: pointer;
+      background: linear-gradient(135deg, #2fbf71, #1f9d8f); box-shadow: 0 14px 40px rgba(20,90,60,.3), inset 0 0 0 3px rgba(255,255,255,.4);
+      transition: all .6s cubic-bezier(.3,1.4,.5,1); }
+    .consensus.on { opacity: 1; transform: translate(-50%, 0) scale(1); pointer-events: auto; }
+    .consensus strong { display: block; font-size: clamp(24px, 5.5vw, 38px); letter-spacing: .14em; line-height: 1.2; text-shadow: 0 3px 0 rgba(0,0,0,.15); }
+    .consensus div { margin-top: 4px; font-size: 14px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .consensus div p { margin: 0; }
+    .consensus.full div { display: block; -webkit-line-clamp: unset; max-height: 50vh; overflow: auto; }
+    .consensus .x { position: absolute; right: 8px; top: 4px; color: #fff; font-size: 22px; opacity: .8; }
 
-    .newpill {
-      position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
-      background: var(--accent); color: #0d1014; font-weight: 700; font-size: 13px;
-      padding: 8px 14px; border-radius: 999px; box-shadow: 0 6px 20px rgba(0,0,0,.35);
-      display: none; z-index: 4;
-    }
-    .newpill.show { display: inline-flex; }
+    /* ---------- drawer / panel ---------- */
+    .sheet { position: fixed; z-index: 5; background: rgba(255, 251, 245, .97); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 10px 50px rgba(60,30,10,.25); display: flex; flex-direction: column; transition: transform .35s cubic-bezier(.2,.9,.3,1); }
+    .drawer { left: 12px; top: 12px; bottom: 12px; width: min(400px, calc(100vw - 24px)); border-radius: 20px; transform: translateX(-110%); }
+    .drawer.on { transform: none; }
+    .panel { right: 12px; top: 12px; bottom: 12px; width: min(520px, calc(100vw - 24px)); border-radius: 20px; transform: translateX(110%); }
+    .panel.on { transform: none; }
+    .sheet header { display: flex; align-items: center; gap: 8px; padding: 12px 12px 10px 16px; border-bottom: 1px solid var(--line); }
+    .sheet header .grow { flex: 1; min-width: 0; }
+    .sheet .x { font-size: 24px; line-height: 1; width: 34px; height: 34px; border-radius: 50%; color: var(--muted); }
+    .sheet .x:hover { background: rgba(0,0,0,.06); }
+    .tabs { display: flex; gap: 4px; background: rgba(0,0,0,.05); padding: 3px; border-radius: 12px; }
+    .tabs button { padding: 4px 14px; border-radius: 9px; font-weight: 700; color: var(--muted); }
+    .tabs button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+    .scroll { flex: 1; overflow: auto; padding: 12px 16px 24px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+    .item { display: block; width: 100%; text-align: left; padding: 9px 11px; margin-bottom: 8px; border-radius: 12px; background: #fff;
+      border: 1px solid var(--line); border-left: 5px solid var(--tc, #aaa); }
+    .item:hover { box-shadow: 0 3px 12px rgba(0,0,0,.08); }
+    .item .meta { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+    .item .who { font-weight: 800; color: var(--ink); }
+    .item .pv { font-size: 13px; color: #4a3f38; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .ty { font-size: 10.5px; font-weight: 800; color: #fff; background: var(--tc, #888); border-radius: 6px; padding: 0 6px; }
+    .roundsep { text-align: center; font-size: 12px; font-weight: 800; color: var(--muted); margin: 14px 0 8px; letter-spacing: .1em; }
+    .who-head { display: flex; align-items: center; gap: 10px; }
+    .dot { width: 30px; height: 30px; border-radius: 50%; flex: none; background: var(--c, #888); border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+    .who-head h2 { margin: 0; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .who-head small { color: var(--muted); }
+    .md { font-size: 14px; line-height: 1.65; word-wrap: break-word; overflow-wrap: anywhere; }
+    .md h1, .md h2, .md h3, .md h4 { margin: 1em 0 .4em; line-height: 1.3; } .md h1 { font-size: 1.3em } .md h2 { font-size: 1.15em } .md h3, .md h4 { font-size: 1.02em }
+    .md p { margin: .55em 0; } .md ul, .md ol { padding-left: 1.4em; margin: .4em 0; }
+    .md code { background: rgba(0,0,0,.06); padding: 1px 5px; border-radius: 5px; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .md pre { background: #2b2420; color: #f5ebdd; padding: 10px 12px; border-radius: 10px; overflow: auto; }
+    .md pre code { background: none; padding: 0; color: inherit; }
+    .md blockquote { margin: .6em 0; padding: 4px 12px; border-left: 4px solid var(--accent); background: rgba(224,112,63,.07); border-radius: 0 8px 8px 0; }
+    .md table { border-collapse: collapse; font-size: 13px; display: block; overflow: auto; }
+    .md td, .md th { border: 1px solid var(--line); padding: 4px 8px; }
+    .md hr { border: 0; border-top: 1px dashed var(--line); }
+    .msgcard { background: #fff; border: 1px solid var(--line); border-top: 5px solid var(--tc, #aaa); border-radius: 14px; padding: 10px 14px; }
+    .msgcard .meta { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    details.hist { margin-top: 8px; background: #fff; border: 1px solid var(--line); border-left: 5px solid var(--tc, #aaa); border-radius: 12px; }
+    details.hist summary { cursor: pointer; padding: 8px 10px; font-size: 13px; list-style: none; }
+    details.hist summary::-webkit-details-marker { display: none; }
+    details.hist .md { padding: 0 12px 10px; border-top: 1px dashed var(--line); }
+    details.hist[open] { box-shadow: 0 3px 12px rgba(0,0,0,.06); }
+    .sec { margin: 18px 0 6px; font-weight: 800; color: var(--muted); font-size: 12.5px; letter-spacing: .08em; }
+    .empty { color: var(--muted); text-align: center; padding: 40px 10px; }
 
-    .side {
-      background: var(--bg-panel); border-left: 1px solid var(--line);
-      display: flex; flex-direction: column; min-height: 0;
-    }
-    .tabs { display: flex; border-bottom: 1px solid var(--line); }
-    .tabs button { flex: 1; padding: 10px 8px; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; }
-    .tabs button.on { color: var(--text); border-bottom-color: var(--accent); font-weight: 650; }
-    .pane { display: none; flex: 1; overflow-y: auto; padding: 10px 8px 16px; }
-    .pane.on { display: block; }
-    .role {
-      display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; align-items: center;
-      width: 100%; text-align: left; padding: 8px; border-radius: 10px; margin: 0 0 2px;
-    }
-    .role:hover, .role.on { background: var(--pill); }
-    .role .dot { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center;
-      justify-content: center; color: #fff; font-weight: 700; font-size: 12px; }
-    .role .name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .role .cnt { font-size: 11px; color: var(--dim); }
-    .role.live .name::after { content: " · 正在发言"; color: var(--good); font-weight: 500; font-size: 11px; }
-    .filter-all { font-size: 12px; color: var(--accent); padding: 6px 8px 10px; }
-    .final { white-space: pre-wrap; word-break: break-word; font-size: 13px; color: var(--text);
-      padding: 8px; line-height: 1.65; }
-    .final.empty { color: var(--muted); text-align: center; padding: 32px 12px; }
-    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good);
-      box-shadow: 0 0 0 0 rgba(109,206,160,.6); animation: ping 1.6s infinite; display: inline-block; }
-    @keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(109,206,160,.55); } 70% { box-shadow: 0 0 0 8px rgba(109,206,160,0); } 100% { box-shadow: 0 0 0 0 rgba(109,206,160,0); } }
+    .loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+      background: var(--bg); z-index: 10; transition: opacity .6s; color: var(--muted); font-weight: 700; }
+    .loading.off { opacity: 0; pointer-events: none; }
+    .loading .ring { width: 46px; height: 46px; border-radius: 50%; border: 5px solid rgba(224,112,63,.2); border-top-color: var(--accent);
+      animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg) } }
+    .err { position: fixed; left: 50%; bottom: 44px; transform: translateX(-50%); background: #b3412f; color: #fff; padding: 6px 14px;
+      border-radius: 10px; font-size: 13px; display: none; z-index: 6; }
 
-    @media (max-width: 820px) {
-      .menu-btn { display: inline-flex; align-items: center; justify-content: center; margin-left: auto; }
-      .main { grid-template-columns: 1fr; }
-      .side {
-        position: fixed; top: var(--bar-h); right: 0; bottom: 0; width: min(86vw, 320px);
-        transform: translateX(100%); transition: transform .2s ease; z-index: 8;
-        box-shadow: none;
-      }
-      .side.open { transform: none; box-shadow: -12px 0 32px rgba(0,0,0,.4); }
-      .scrim { display: none; position: fixed; inset: var(--bar-h) 0 0 0; background: rgba(0,0,0,.45); z-index: 7; }
-      .scrim.on { display: block; }
-      .topbar { gap: 8px; padding: 0 10px; }
-      .stats { gap: 6px; }
-      .chip { padding: 3px 8px; font-size: 11px; }
-      .feed { padding: 14px 12px calc(72px + var(--safe-b)); }
-      .brand h1 { font-size: 14px; }
+    @media (max-width: 640px) {
+      .titlebar h1 { font-size: 14px; max-width: 38vw; }
+      .btn { padding: 4px 8px; font-size: 12px; }
+      .chip { font-size: 11.5px; padding: 2px 8px; }
+      .tag { font-size: 10px; padding: 0 6px 1px; }
+      .bubble { font-size: 11.5px; max-width: 42vw; padding: 5px 8px 6px; }
+      .drawer, .panel { left: 0; right: 0; top: auto; bottom: 0; width: 100%; height: 78vh; border-radius: 20px 20px 0 0;
+        transform: translateY(105%); padding-bottom: var(--safe-b); }
+      .drawer.on, .panel.on { transform: none; }
+      .hint { display: none; }
+      .consensus { top: calc(124px + var(--safe-t)); padding: 8px 34px 10px; }
+      .consensus div { font-size: 13px; }
     }
   </style>
 </head>
 <body>
-  <div class="app">
-    <header class="topbar">
-      <div class="brand">
-        <h1>讨论室 · P ≟ NP</h1>
-        <div class="sub">十位文心智能体持续辩论 · 只读旁听</div>
+  <div id="stage"></div>
+  <div id="overlay"></div>
+
+  <div class="hud">
+    <div class="titlebar">
+      <span class="live" id="live" title="数据同步状态"></span>
+      <h1 id="topic">P ≟ NP 圆桌会议</h1>
+      <div class="actions">
+        <button class="btn" id="btnLog">💬 时间线</button>
+        <button class="btn" id="btnFinal">📜 终稿</button>
+        <a class="btn" href="./classic.html" title="旧版文字界面">经典版</a>
       </div>
-      <div class="stats" id="stats">
-        <span class="chip">轮次 <b id="st-round">—</b></span>
-        <span class="chip">发言 <b id="st-speak">等待开场</b></span>
-        <span class="chip">调用 <b id="st-calls">0</b></span>
-        <span class="chip" id="chip-429">限流 429 <b id="st-429">0</b></span>
-      </div>
-      <button class="menu-btn" id="menuBtn" aria-label="打开侧栏">☰</button>
-    </header>
-    <div class="main">
-      <div class="feed-wrap">
-        <div class="feed" id="feed">
-          <div class="waiting" id="waiting">
-            <span class="pulse"></span>
-            <div>等待开场</div>
-            <div style="font-size:12px;color:var(--dim)">讨论板还没有消息，智能体入场后会自动出现</div>
-          </div>
-        </div>
-        <button class="newpill" id="newpill">新消息</button>
-      </div>
-      <aside class="side" id="side">
-        <div class="tabs">
-          <button class="on" data-tab="roster">席位</button>
-          <button data-tab="final">终稿</button>
-        </div>
-        <div class="pane on" id="pane-roster">
-          <button class="filter-all" id="clearFilter" hidden>显示全部消息</button>
-          <div id="roster"></div>
-        </div>
-        <div class="pane" id="pane-final">
-          <div class="final empty" id="final">终稿尚未形成。</div>
-        </div>
-      </aside>
-      <div class="scrim" id="scrim"></div>
+    </div>
+    <div class="chips">
+      <span class="chip">轮次 <b id="st-round">—</b></span>
+      <span class="chip speak">发言中 <b id="st-speak">等待开场</b></span>
+      <span class="chip">调用 <b id="st-calls">0</b></span>
+      <span class="chip" id="chip-429">429 <b id="st-429">0</b></span>
+      <span class="chip" id="chip-cons">共识 <b id="st-cons">未达成</b></span>
+      <span class="chip">消息 <b id="st-msgs">0</b></span>
     </div>
   </div>
-  <script>
-  (function () {
-    const ROLES = [
-      { id: 1, name: "协调者", color: "#4f8ef0" },
-      { id: 2, name: "规约专家", color: "#8b6cf0" },
-      { id: 3, name: "算法设计者 A", color: "#e08a3c" },
-      { id: 4, name: "算法设计者 B", color: "#d4a017" },
-      { id: 5, name: "复杂度分析", color: "#2fbfa8" },
-      { id: 6, name: "正确性证明", color: "#3d9b6e" },
-      { id: 7, name: "反例猎手", color: "#e05a5a" },
-      { id: 8, name: "已知壁垒审查", color: "#c45c8a" },
-      { id: 9, name: "文献核查", color: "#6b8fa3" },
-      { id: 10, name: "定稿人", color: "#8b7355" }
-    ];
-    const TYPE_LABEL = { claim: "主张", rebuttal: "反驳", retract: "撤回", summary: "总结", status: "状态" };
-    const TZ = "Asia/Shanghai";
 
-    const feed = document.getElementById("feed");
-    const waiting = document.getElementById("waiting");
-    const newpill = document.getElementById("newpill");
-    const rosterEl = document.getElementById("roster");
-    const clearFilter = document.getElementById("clearFilter");
-    const finalEl = document.getElementById("final");
-    const side = document.getElementById("side");
-    const scrim = document.getElementById("scrim");
+  <div class="consensus" id="consensus">
+    <button class="x" id="closeCons" aria-label="关闭">×</button>
+    <strong>🎉 达成共识</strong>
+    <div id="consensus-text" title="点击展开/收起"></div>
+  </div>
+  <div class="hint" id="hint">拖动旋转 · 双指缩放 · 点小人或气泡看全文</div>
+  <div class="err" id="err"></div>
 
-    const known = new Map(ROLES.map(r => [r.id, r]));
-    const messages = []; // {key, ...msg}
-    const counts = new Map();
-    let filterId = null;
-    let pinned = false;
-    let unseen = 0;
-    let lastStatus = null;
-    let sinceTick = null;
+  <aside class="sheet drawer" id="drawer" aria-label="时间线与终稿">
+    <header>
+      <div class="grow"><div class="tabs">
+        <button class="on" data-tab="log">时间线</button>
+        <button data-tab="final">final.md</button>
+      </div></div>
+      <button class="x" id="closeDrawer" aria-label="关闭">×</button>
+    </header>
+    <div class="scroll" id="log"></div>
+    <div class="scroll md" id="finalPane" style="display:none"></div>
+  </aside>
 
-    function escapeHtml(s) {
-      return String(s)
-        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-    }
-    function renderMd(raw) {
-      const src = String(raw ?? "");
-      const parts = src.split(/```/);
-      let html = "";
-      for (let i = 0; i < parts.length; i++) {
-        if (i % 2 === 1) {
-          let block = parts[i];
-          const nl = block.indexOf("\n");
-          if (nl !== -1) {
-            const first = block.slice(0, nl).trim();
-            if (/^[a-zA-Z0-9_+-]+$/.test(first)) block = block.slice(nl + 1);
-          }
-          html += "<pre><code>" + escapeHtml(block.replace(/\n$/, "")) + "</code></pre>";
-        } else {
-          let t = escapeHtml(parts[i]);
-          t = t.replace(/`([^`\n]+)`/g, "<code>$1</code>");
-          t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-          t = t.replace(/\n/g, "<br>");
-          html += t;
-        }
-      }
-      return html;
-    }
-    function fmtTime(ts) {
-      if (ts == null || ts === "") return "";
-      let d;
-      if (typeof ts === "number") d = new Date(ts < 1e12 ? ts * 1000 : ts);
-      else {
-        const s = String(ts);
-        d = new Date(/^\d+$/.test(s) ? (Number(s) < 1e12 ? Number(s) * 1000 : Number(s)) : s);
-      }
-      if (isNaN(d)) return String(ts);
-      return new Intl.DateTimeFormat("zh-CN", {
-        timeZone: TZ, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
-      }).format(d);
-    }
-    function fmtElapsed(since) {
-      if (!since) return "";
-      let d;
-      if (typeof since === "number") d = new Date(since < 1e12 ? since * 1000 : since);
-      else d = new Date(since);
-      if (isNaN(d)) return "";
-      const sec = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
-      if (sec < 60) return sec + " 秒";
-      const m = Math.floor(sec / 60), s = sec % 60;
-      if (m < 60) return m + " 分 " + s + " 秒";
-      return Math.floor(m / 60) + " 时 " + (m % 60) + " 分";
-    }
-    function roleOf(msg) {
-      const id = Number(msg.role_id);
-      const knownR = known.get(id);
-      const name = msg.role || (knownR && knownR.name) || ("席位 " + (id || "?"));
-      const color = (knownR && knownR.color) || colorFor(id || name);
-      return { id, name, color, initial: name.charAt(0) };
-    }
-    function colorFor(key) {
-      const palette = ["#4f8ef0","#8b6cf0","#e08a3c","#d4a017","#2fbfa8","#3d9b6e","#e05a5a","#c45c8a","#6b8fa3","#8b7355"];
-      let h = 0; const s = String(key);
-      for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-      return palette[h % palette.length];
-    }
-    function nearBottom() {
-      return feed.scrollHeight - feed.scrollTop - feed.clientHeight < 80;
-    }
-    function scrollBottom() { feed.scrollTop = feed.scrollHeight; }
+  <aside class="sheet panel" id="panel" aria-label="发言详情">
+    <header>
+      <div class="grow who-head"><span class="dot" id="panelDot"></span>
+        <div style="min-width:0"><h2 id="panelTitle">发言</h2><small id="panelSub"></small></div></div>
+      <button class="x" id="closePanel" aria-label="关闭">×</button>
+    </header>
+    <div class="scroll" id="panelBody"></div>
+  </aside>
 
-    function msgKey(m, idxHint) {
-      return [m.ts, m.round, m.role_id, m.type, (m.text || "").slice(0, 80), idxHint].join("|");
-    }
-
-    function appendMsg(m) {
-      const r = roleOf(m);
-      const typ = (m.type || "claim").toLowerCase();
-      const el = document.createElement("div");
-      el.className = "msg " + typ;
-      el.dataset.role = String(r.id);
-      el.innerHTML =
-        '<div class="av" style="background:' + r.color + '">' + escapeHtml(r.initial) + "</div>" +
-        '<div class="bubble">' +
-          '<div class="meta">' +
-            '<span class="who" style="color:' + r.color + '">' + escapeHtml(r.name) + "</span>" +
-            (m.round != null && m.round !== "" ? '<span class="rnd">第 ' + escapeHtml(m.round) + " 轮</span>" : "") +
-            '<span class="tag ' + typ + '">' + escapeHtml(TYPE_LABEL[typ] || typ) + "</span>" +
-            '<span class="when">' + escapeHtml(fmtTime(m.ts)) + "</span>" +
-          "</div>" +
-          '<div class="body">' + renderMd(m.text || "") + "</div>" +
-        "</div>";
-      feed.appendChild(el);
-    }
-
-    function applyFilter() {
-      const nodes = feed.querySelectorAll(".msg");
-      nodes.forEach(n => {
-        n.style.display = (!filterId || n.dataset.role === String(filterId)) ? "" : "none";
-      });
-      clearFilter.hidden = !filterId;
-    }
-
-    function renderRoster() {
-      const speaking = lastStatus && lastStatus.speaking;
-      rosterEl.innerHTML = ROLES.map(r => {
-        const n = counts.get(r.id) || 0;
-        const on = filterId === r.id ? " on" : "";
-        const live = isSpeaking(speaking, r) ? " live" : "";
-        return '<button class="role' + on + live + '" data-id="' + r.id + '">' +
-          '<span class="dot" style="background:' + r.color + '">' + escapeHtml(r.name.charAt(0)) + "</span>" +
-          '<span class="name">' + escapeHtml(r.name) + "</span>" +
-          '<span class="cnt">' + n + "</span></button>";
-      }).join("");
-    }
-
-    function isSpeaking(speaking, r) {
-      if (speaking == null || speaking === "") return false;
-      const s = String(speaking);
-      return s === String(r.id) || s === r.name || s.indexOf(r.name) !== -1;
-    }
-
-    function updateStatus(st) {
-      lastStatus = st || null;
-      const round = st && (st.round != null) ? st.round : "—";
-      document.getElementById("st-round").textContent = round;
-      document.getElementById("st-calls").textContent = (st && st.calls != null) ? st.calls : 0;
-      const r429 = (st && (st.r429 != null ? st.r429 : st["429"])) || 0;
-      document.getElementById("st-429").textContent = r429;
-      const chip429 = document.getElementById("chip-429");
-      chip429.classList.toggle("warn", r429 > 0);
-      chip429.classList.toggle("bad", r429 >= 5);
-
-      const speakEl = document.getElementById("st-speak");
-      const chip = speakEl.parentElement;
-      const speaking = st && st.speaking;
-      if (speaking) {
-        const role = ROLES.find(r => isSpeaking(speaking, r));
-        const name = role ? role.name : String(speaking);
-        chip.classList.add("speak");
-        speakEl.innerHTML = '<span class="dots"><i></i><i></i><i></i></span> ' +
-          escapeHtml(name) +
-          ' <span id="elapsed" style="opacity:.8"></span>';
-        const tick = () => {
-          const e = document.getElementById("elapsed");
-          if (!e) return;
-          const t = fmtElapsed(st.since);
-          e.textContent = t ? "· 已 " + t : "";
-        };
-        tick();
-        if (sinceTick) clearInterval(sinceTick);
-        sinceTick = setInterval(tick, 1000);
-      } else {
-        chip.classList.remove("speak");
-        speakEl.textContent = messages.length ? "间歇" : "等待开场";
-        if (sinceTick) { clearInterval(sinceTick); sinceTick = null; }
-      }
-      renderRoster();
-    }
-
-    async function fetchText(url) {
-      const res = await fetch(url + (url.includes("?") ? "&" : "?") + "t=" + Date.now(), { cache: "no-store" });
-      if (res.status === 404) return { missing: true, text: "" };
-      if (!res.ok) return { missing: false, text: null, err: res.status };
-      return { missing: false, text: await res.text() };
-    }
-
-    function parseJsonl(text) {
-      const out = [];
-      if (!text) return out;
-      const lines = text.split(/\n/);
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        try { out.push(JSON.parse(line)); }
-        catch (e) { /* incomplete last line is fine while the file is being written */ }
-      }
-      return out;
-    }
-
-    let inflight = false;
-    async function poll() {
-      if (inflight) return;
-      inflight = true;
-      try {
-        const [msgRes, stRes, finRes] = await Promise.all([
-          fetchText("./data/messages.jsonl"),
-          fetchText("./data/status.json"),
-          fetchText("./data/final.md")
-        ]);
-
-        if (stRes.text) {
-          try { updateStatus(JSON.parse(stRes.text)); }
-          catch (e) { /* ignore partial json */ }
-        } else if (!lastStatus) {
-          updateStatus(null);
-        }
-
-        if (finRes.text && finRes.text.trim()) {
-          finalEl.classList.remove("empty");
-          finalEl.textContent = finRes.text;
-        } else {
-          finalEl.classList.add("empty");
-          finalEl.textContent = "终稿尚未形成。";
-        }
-
-        const incoming = parseJsonl(msgRes.text || "");
-        const prevLen = messages.length;
-        // Treat the file as the source of truth; append only new trailing records.
-        if (incoming.length < messages.length) {
-          // File was rewritten; rebuild.
-          messages.length = 0;
-          counts.clear();
-          feed.querySelectorAll(".msg").forEach(n => n.remove());
-        }
-        const wasNear = nearBottom();
-        for (let i = messages.length; i < incoming.length; i++) {
-          const m = incoming[i];
-          messages.push(m);
-          const id = Number(m.role_id);
-          if (id) counts.set(id, (counts.get(id) || 0) + 1);
-          if (m.role && id && known.has(id) && m.role !== known.get(id).name) {
-            // keep catalog name, display uses message role
-          }
-          appendMsg(m);
-        }
-        const added = messages.length - prevLen;
-        if (messages.length) waiting.style.display = "none";
-        else waiting.style.display = "";
-
-        if (added > 0) {
-          applyFilter();
-          renderRoster();
-          if (!pinned && (wasNear || prevLen === 0)) {
-            scrollBottom();
-            unseen = 0;
-            newpill.classList.remove("show");
-          } else if (pinned || !wasNear) {
-            pinned = true;
-            unseen += added;
-            newpill.textContent = unseen + " 条新消息";
-            newpill.classList.add("show");
-          }
-        }
-      } catch (e) {
-        // stay quiet; next poll will retry
-      } finally {
-        inflight = false;
-      }
-    }
-
-    feed.addEventListener("scroll", () => {
-      if (nearBottom()) {
-        pinned = false;
-        unseen = 0;
-        newpill.classList.remove("show");
-      } else {
-        pinned = true;
-      }
-    });
-    newpill.addEventListener("click", () => {
-      pinned = false; unseen = 0; newpill.classList.remove("show"); scrollBottom();
-    });
-    rosterEl.addEventListener("click", (e) => {
-      const btn = e.target.closest(".role");
-      if (!btn) return;
-      const id = Number(btn.dataset.id);
-      filterId = filterId === id ? null : id;
-      applyFilter(); renderRoster();
-    });
-    clearFilter.addEventListener("click", () => { filterId = null; applyFilter(); renderRoster(); });
-    document.querySelectorAll(".tabs button").forEach(btn => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".tabs button").forEach(b => b.classList.remove("on"));
-        document.querySelectorAll(".pane").forEach(p => p.classList.remove("on"));
-        btn.classList.add("on");
-        document.getElementById("pane-" + btn.dataset.tab).classList.add("on");
-      });
-    });
-    const menuBtn = document.getElementById("menuBtn");
-    function closeSide() { side.classList.remove("open"); scrim.classList.remove("on"); }
-    menuBtn.addEventListener("click", () => {
-      const open = !side.classList.contains("open");
-      side.classList.toggle("open", open);
-      scrim.classList.toggle("on", open);
-    });
-    scrim.addEventListener("click", closeSide);
-
-    renderRoster();
-    updateStatus(null);
-    poll();
-    setInterval(poll, 3000);
-  })();
-  </script>
+  <div class="loading" id="loading"><div class="ring"></div><div>正在摆桌子、叫小人入座…</div></div>
+  <noscript><p style="padding:20px">需要 JavaScript。也可以看 <a href="./classic.html">经典版</a>。</p></noscript>
+  <script type="module" src="./js/room.js"></script>
 </body>
 </html>
