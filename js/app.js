@@ -570,7 +570,7 @@ function openSession(sid) {
     return (list || []).map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.repo)}</a>${x.stars ? `<span class="star">★ ${Number(x.stars).toLocaleString()}</span>` : ''}`).join(' · ');
   }
   function kitHtml(r) {
-    if (!r.kit) return `<div class="kit"><div class="desc">${r.side === 'judge' ? '裁判：主路径 Gemini 传令官（webhook → verdict.json），超时由 Claude Code CLI 兜底。' : r.side === 'chair' ? '主持·计时：脚本角色，不调用模型。' : '旧场次角色（升级前创建），未配置 skill。'}</div></div>`;
+    if (!r.kit) return `<div class="kit"><div class="desc">${r.side === 'judge' ? '裁判：主路径 Gemini 传令官（webhook → verdict.json），180 秒未到由 Claude Code CLI 兜底；Gemini 晚到则以 Gemini 为准。' : r.side === 'chair' ? '主持·计时：脚本角色，不调用模型。' : '旧场次角色（升级前创建），未配置 skill。'}</div></div>`;
     const skills = (r.skills || []).map((k) => `<div class="sk"><code>${esc(k.name)}</code> <span class="lic">${esc(k.license || '')}</span> <span class="desc">${esc(plain(k.description, 110))}</span>
       <div class="src">${k.sources?.length ? '出处 ' + srcLinks(k.sources) : '本库原创'}</div></div>`).join('');
     const a = r.agents_md;
@@ -604,7 +604,7 @@ function openSession(sid) {
       <h3>严格计时 / 限字</h3>
       <p>每个环节都有字数上限和发言时限（计时牌倒计时）。超出字数的部分<b>硬截断</b>并标注「超字截断」；模型在时限内没交出发言，该发言<b>作废</b>。质询的所有问答共享一个总时限，时间到即结束。违规会进入裁判「规则」分项扣分。等待上游模型（限流/额度/出错重试）的时间<b>不计入</b>发言时间，计时牌显示 ⏸。</p>
       <h3>裁判</h3>
-      <p>主路径是 <b>Gemini 传令官</b>：赛后写出 <code>judge_request.json</code> 并通过 webhook 发出，等待 <code>verdict.json</code>；超过 15 分钟未收到，则由本机 <b>Claude Code CLI</b>（<code>claude -p</code>，同一量表）<b>兜底裁判</b>，界面会标明。不使用 Antigravity。量表五项各 10 分：论证、证据、交锋、质询、规则；另给辩手分（26–30）。按 flow 判，未回应的论点视为成立。</p></div>`;
+      <p>主路径是 <b>Gemini 传令官</b>：赛后写出 <code>judge_request.json</code> 并通过 webhook 发出，等待 <code>verdict.json</code> / <code>verdict_herald.json</code>；超过 180 秒未收到，则由本机 <b>Claude Code CLI</b>（<code>claude -p</code>，同一量表）<b>兜底裁判</b>（写 <code>verdict_fallback.json</code>），界面会标明。Gemini 裁决晚到时自动改为以它为准，兜底保留为第二意见。量表五项各 10 分：论证、证据、交锋、质询、规则；另给辩手分（26–30）。按 flow 判，未回应的论点视为成立。</p></div>`;
   }
   function scoresHtml(v) {
     const rows = [['argument', '论证'], ['evidence', '证据'], ['clash', '交锋'], ['cross_ex', '质询'], ['rules', '规则']];
@@ -620,7 +620,7 @@ function openSession(sid) {
       <h3 style="font-size:15px;margin:6px 0">判决理由（RFD）</h3><div class="rfd">${esc(v.rfd)}</div>
       ${v.key_clashes?.length ? `<h3 style="font-size:15px;margin:12px 0 6px">关键交锋</h3><ol class="pts">${v.key_clashes.map((c) => `<li>${esc(c)}</li>`).join('')}</ol>` : ''}
       <h3 style="font-size:15px;margin:12px 0 6px">辩手分</h3><div class="pts">${(v.speaker_points || []).map((p) => `<div><b>${esc(p.name)}</b> ${p.points} <span style="color:var(--muted)">${esc(p.note || '')}</span></div>`).join('')}</div>
-      <p style="font-size:12px;color:var(--muted);margin-top:12px">裁判：${(v.judge || {}).fallback ? '<b style="color:#b45309">兜底裁判</b>' : 'Gemini 传令官'} · ${esc((v.judge || {}).backend || v.backend || '')}（${esc((v.judge || {}).model || v.model || '')}）· ${esc(v.decided_at || '')}${v.elapsed_s ? ' · 用时 ' + v.elapsed_s + 's' : ''}</p>`;
+      <p style="font-size:12px;color:var(--muted);margin-top:12px">裁判：${(v.judge || {}).fallback ? '<b style="color:#b45309">兜底裁判</b>' : 'Gemini 传令官'} · ${esc((v.judge || {}).backend || v.backend || '')}（${esc((v.judge || {}).model || v.model || '')}）· ${esc(v.decided_at || '')}${v.elapsed_s ? ' · 用时 ' + v.elapsed_s + 's' : ''}</p>${v.second_opinion ? `<p style="font-size:12px;color:var(--muted)">第二意见：兜底裁判（${esc((v.second_opinion.judge || {}).backend || '')}）判${v.second_opinion.winner === 'aff' ? '正方' : '反方'}胜 ${v.second_opinion.aff_total} : ${v.second_opinion.neg_total}</p>` : ''}${v.primary === false ? '<p style="font-size:12px;color:#b45309">Gemini 主裁判尚未到达，当前为兜底裁决；到达后自动替换。</p>' : ''}`;
     growBars($('pane'));
   }
   async function renderFinal() {
@@ -664,7 +664,7 @@ function openSession(sid) {
     $('vbox').innerHTML = `<div class="gavel">🔨</div><div class="k">裁 判 宣 判</div>
       <div class="win ${v.winner}">${w}胜！</div><div class="score">${v.scores.aff.total} : ${v.scores.neg.total}</div>
       ${scoresHtml(v)}<div class="rfd">${esc(v.rfd)}</div>
-      <div class="by">${(v.judge || {}).fallback ? '<b class="fb">兜底裁判</b> ' : '<b>Gemini 裁判</b> '}${esc((v.judge || {}).backend || v.backend || '')}（${esc((v.judge || {}).model || v.model || '')}）${v.mock_debate ? ' · 本场为 mock 演练' : ''}</div>
+      <div class="by">${(v.judge || {}).fallback ? '<b class="fb">兜底裁判</b> ' : '<b>Gemini 裁判</b> '}${esc((v.judge || {}).backend || v.backend || '')}（${esc((v.judge || {}).model || v.model || '')}）${v.mock_debate ? ' · 本场为 mock 演练' : ''}${v.second_opinion ? ' · 第二意见：兜底判' + (v.second_opinion.winner === 'aff' ? '正方' : '反方') + '胜 ' + v.second_opinion.aff_total + ':' + v.second_opinion.neg_total : ''}${v.primary === false ? ' · 等待 Gemini 主裁判' : ''}</div>
       <div class="mact" style="justify-content:center"><button class="btn small" id="vClose">关闭</button><button class="btn small ghost" id="vMore">查看判决详情</button></div>`;
     $('verdict').classList.add('on');
     growBars($('vbox'));
