@@ -290,3 +290,24 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @media (max-width: 900px) { .votebar { top: 52px; bottom: auto; } }
 .phasebar { top: 142px; }
 @media (max-width: 900px) { .phasebar { top: 64px; } .debate .votebar { display: none; } }
+
+/* ---------------- 2026-11-12 22:59 mobile pass (390/360 px): tap targets ≥ 40px, modal + verdict fit the screen ---------------- */
+.iconbtn.playbtn { width: 34px; height: 34px; font-size: 15px; }
+.field input[type=checkbox] { width: auto; margin: 0 6px 0 0; vertical-align: -2px; }
+.field small label { display: inline-flex; align-items: center; min-height: 32px; cursor: pointer; }
+@media (max-width: 900px), (pointer: coarse) {
+  .btn, .btn.small, .chip-btn, .live-btn, #testToggle { min-height: 40px; }
+  .btn.small { padding: 6px 12px; }
+  .iconbtn, .iconbtn.playbtn { width: 40px; height: 40px; }
+  .live-btn { min-width: 52px; }
+  .mact .btn { min-height: 44px; min-width: 72px; justify-content: center; }
+  .mbox { padding: 16px 16px 0; max-height: calc(100% - 8px); }
+  .modal { padding: 8px; }
+  .mbox .mact { position: sticky; bottom: 0; background: var(--paper); padding: 10px 0 calc(12px + var(--safe-b)); margin-top: 4px; box-shadow: 0 -8px 12px -10px rgba(0,0,0,.18); }
+  .vbox { width: 94%; max-height: calc(100% - 16px); padding: 14px 14px 0; }
+  .vbox .gavel { font-size: 36px; }
+  .vbox .win { font-size: 30px; }
+  .vbox .score { font-size: 17px; margin-bottom: 8px; }
+  .vbox .rfd { max-height: 110px; }
+  .vbox .mact { position: sticky; bottom: 0; background: #fffdf8; padding: 10px 0 12px; margin-top: 6px; }
+}
