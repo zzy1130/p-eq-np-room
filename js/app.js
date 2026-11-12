@@ -72,12 +72,11 @@ async function discover() {
     if (sameOrigin) tries.push(probe(sameOrigin));
     const saved = localStorage.getItem('arenaBase');
     if (saved && saved !== sameOrigin) tries.push(probe(saved));
-    tries.push(tunnelFromApi().then(probe));
     tries.push(tunnelFromPages().then(probe));
     try {
       const base = await Promise.any(tries).catch(async () => {   // one quick retry before giving up
         await sleep(1500);
-        return Promise.any([tunnelFromApi().then(probe), tunnelFromPages().then(probe), ...(saved ? [probe(saved)] : [])]);
+        return Promise.any([tunnelFromApi().then(probe), tunnelFromPages().then(probe), ...(saved ? [probe(saved)] : [])]);   // GitHub API = fresher copy
       });
       Net.base = base; Net.fails = 0;
       localStorage.setItem('arenaBase', base);
@@ -108,7 +107,7 @@ function recordLatency(m) {
 const API = {
   async sessions() {
     if (Net.mode === 'live') {
-      try { const j = await fetchJSON(Net.base + '/api/sessions'); Net.fails = 0; return j.sessions; } catch (e) { noteFailure(); throw e; }
+      try { const j = await fetchJSON(Net.base + '/api/sessions' + (homeTest ? '?test=1' : '')); Net.fails = 0; return j.sessions; } catch (e) { noteFailure(); throw e; }
     }
     const j = await fetchJSON(PAGES + 'snap/sessions.json?t=' + Date.now());
     return j.sessions;
@@ -151,7 +150,7 @@ addEventListener('hashchange', () => route());
 // =====================================================================================
 // Home
 // =====================================================================================
-let homeTimer = 0, homeFilter = 'all', homeData = null;
+let homeTimer = 0, homeFilter = 'all', homeData = null, homeTest = /[?&]test=1/.test(location.search);
 function startHome() { clearTimeout(homeTimer); loadHome(); }
 function stopHome() { clearTimeout(homeTimer); }
 async function loadHome() {
@@ -164,17 +163,18 @@ function renderHome() {
   $('cards').innerHTML = list.map((s) => {
     const deb = s.mode === 'debate';
     let st = STATE_LABEL[s.state] || s.state;
-    if (s.state === 'judged' && s.winner) st = `已宣判 · ${s.winner === 'aff' ? '正方' : '反方'}胜`;
+    if (s.state === 'judged' && s.winner) st = `已宣判 · ${s.winner === 'aff' ? '正方' : '反方'}胜${s.judge_label === '兜底裁判' ? '（兜底）' : ''}`;
     if (s.state === 'running' && s.phase_label) st = '进行中 · ' + s.phase_label;
     return `<a class="card" href="#/s/${encodeURIComponent(s.sid)}">
       <div class="row"><span class="badge ${deb ? 'db' : 'rt'}">${deb ? '美式辩论' : '圆桌讨论'}</span>
         <span class="state ${esc(s.state)}">${esc(st)}</span></div>
       <h3>${esc(s.topic || s.sid)}</h3>
-      <div class="meta"><span>🤖 ${s.n_roles || '—'} 个 bot</span><span>💬 ${s.n_msgs || 0} 条</span><span>${esc(ago(s.created_ms))}</span>${s.legacy ? '<span>存档</span>' : ''}</div>
+      <div class="meta">${s.mock ? '<span class="state">演练·mock</span>' : ''}${s.test ? '<span class="state">测试</span>' : ''}<span>🤖 ${s.n_roles || '—'} 个 bot</span><span>💬 ${s.n_msgs || 0} 条</span><span>${esc(ago(s.created_ms))}</span>${s.legacy ? '<span>存档</span>' : ''}</div>
     </a>`;
   }).join('');
 }
 $('filters').addEventListener('click', (e) => {
+  if (e.target.closest('#testToggle')) { homeTest = !homeTest; $('testToggle').classList.toggle('on', homeTest); loadHome(); return; }
   const b = e.target.closest('[data-f]'); if (!b) return;
   homeFilter = b.dataset.f;
   for (const x of $('filters').children) x.classList.toggle('on', x === b);
@@ -207,6 +207,7 @@ $('form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const fd = new FormData($('form'));
   const body = { mode: fd.get('mode'), topic: String(fd.get('topic') || '').trim(), notes: String(fd.get('notes') || '').trim(), passcode: String(fd.get('passcode') || '') };
+  if (fd.get('mock')) { body.mock = true; body.judge_wait_s = 300; }
   $('submitBtn').disabled = true; $('mErr').textContent = '';
   try {
     const r = await API.submit(body);
@@ -243,7 +244,7 @@ function getStage() {
 
 function openSession(sid) {
   const S = { sid, topic: null, roles: [], byId: new Map(), msgs: [], status: {}, verdict: null, finalExists: false,
-    cursor: 0, follow: true, playing: false, tab: 'tl', closed: false, arrival: new Map(), verdictShownFor: -1, lastBundle: 0, openItems: new Set() };
+    cursor: 0, follow: true, playing: false, tab: 'tl', closed: false, arrival: new Map(), verdictShownFor: -1, lastBundle: 0, openItems: new Set(), live: null, ws: null };
   const ctl = { sid, close, showRole, seek };
   let pollAbort = null, playTimer = 0, uiTimer = 0, snapTimer = 0;
   $('pane').innerHTML = '<div class="tl-ann"><span>加载中…</span></div>';
@@ -272,11 +273,16 @@ function openSession(sid) {
     S.verdict = b.verdict || null;
     S.finalExists = !!(b.final_exists || b.final_text);
     S.finalText = b.final_text;
+    S.live = b.live || null;
     const before = S.msgs.length;
     S.msgs = b.messages || [];
     S.msgs.forEach((m, i) => { m.idx = i; });
     if (S.follow || S.cursor > S.msgs.length) S.cursor = S.msgs.length;
     if (!before && !running() && S.msgs.length) { S.follow = false; toast('本场已结束：可拖动时间轴或点 ▶ 从头回放', 4200); }
+    if (!before && running() && S.msgs.length > 2) {   // 补播最近几条，再接上直播
+      S.cursor = Math.max(0, S.msgs.length - 3); S.follow = false; S.playing = true; S.catchup = true;
+      setTimeout(play, 900);
+    }
     renderAll();
   }
   function applyIncoming(j) {
@@ -284,6 +290,7 @@ function openSession(sid) {
     if (j.status) S.status = j.status;
     if (j.verdict) S.verdict = j.verdict;
     if (j.final_exists != null) S.finalExists = j.final_exists;
+    if (j.live) { S.live = j.live; renderLive(); }
     let added = 0;
     for (const m of j.messages || []) {
       if (m.idx !== S.msgs.length) continue;      // dedupe / ordering guard
@@ -305,11 +312,42 @@ function openSession(sid) {
       if (e.status !== 404) setTimeout(load, 3000);
     }
   }
+  function wsLoop() {
+    return new Promise((resolve) => {
+      if (!('WebSocket' in window) || (Net.wsFails || 0) >= 2) return resolve(false);
+      const url = Net.base.replace(/^http/, 'ws') + `/api/s/${encodeURIComponent(sid)}/ws?since=${S.msgs.length}`;
+      let opened = false, ws;
+      try { ws = new WebSocket(url); } catch { Net.wsFails = (Net.wsFails || 0) + 1; return resolve(false); }
+      S.ws = ws;
+      const t = setTimeout(() => { if (!opened) { Net.wsFails = (Net.wsFails || 0) + 1; try { ws.close(); } catch {} resolve(false); } }, 6000);
+      ws.onopen = () => { opened = true; clearTimeout(t); Net.transport = 'WebSocket'; Net.wsFails = 0; setConn('live', '实时·WS', '实时通道（WebSocket）：' + Net.base); };
+      ws.onmessage = (e) => {
+        let ev; try { ev = JSON.parse(e.data); } catch { return; }
+        const d = ev.data;
+        if (ev.type === 'msg') applyIncoming({ messages: [d] });
+        else if (ev.type === 'status') applyIncoming({ status: d });
+        else if (ev.type === 'live') { S.live = d; recordLiveLatency(d); renderLive(); }
+        else if (ev.type === 'verdict') applyIncoming({ verdict: d });
+        else if (ev.type === 'topic') applyIncoming({ topic: d });
+        else if (ev.type === 'final') S.finalExists = !!d.exists;
+      };
+      ws.onclose = () => {
+        clearTimeout(t);
+        if (S.closed) return resolve(true);
+        if (!opened) return resolve(false);
+        setTimeout(() => { if (!S.closed) pollLoop(); }, 1000);
+        resolve(true);
+      };
+      ws.onerror = () => {};
+    });
+  }
   async function pollLoop() {
+    if (Net.mode === 'live' && await wsLoop()) return;
+    Net.transport = '长轮询';
     while (!S.closed && Net.mode === 'live') {
       pollAbort = new AbortController();
       try {
-        const j = await fetchJSON(`${Net.base}/api/s/${encodeURIComponent(sid)}/poll?since=${S.msgs.length}&sv=${S.status.updated_ms || 0}`,
+        const j = await fetchJSON(`${Net.base}/api/s/${encodeURIComponent(sid)}/poll?since=${S.msgs.length}&sv=${S.status.updated_ms || 0}&lv=${S.live?.seq ?? ''}`,
           { timeout: 28000, signal: pollAbort.signal });
         Net.fails = 0;
         if (S.closed) return;
@@ -328,6 +366,33 @@ function openSession(sid) {
     if (Net.mode === 'live') { pollLoop(); return; }
     try { const b = await API.bundle(sid); if (!S.closed) applyBundle(b); } catch {}
     snapTimer = setTimeout(snapLoop, 30000);
+  }
+
+  // ---------------- live subtitle (partial_text typed as it streams)
+  function liveSpeakers() {
+    const lv = S.live;
+    if (!lv || !running() || S.cursor < S.msgs.length) return [];
+    return Object.values(lv.speakers || {}).filter((x) => !x.done);
+  }
+  function renderLive() {
+    const el = $('subtitle');
+    const sp = liveSpeakers();
+    const lv = S.live;
+    const focus = sp.find((x) => String(x.role_id) === String(lv?.role_id)) || sp[0];
+    if (!focus) { el.classList.add('hidden'); return; }
+    const name = S.byId.get(Number(focus.role_id))?.name || focus.role;
+    let txt = focus.partial_text || '';
+    const cut = txt.indexOf('【发言】');
+    const pre = cut >= 0 ? '' : (txt.includes('【评估】') || txt.includes('【自省】') ? '（思考中）' : '');
+    if (cut >= 0) txt = txt.slice(cut + 4);
+    else if (pre) txt = txt.slice(Math.max(txt.lastIndexOf('【评估】'), txt.lastIndexOf('【自省】')) + 4);
+    txt = txt.replace(/^(SHORT|TYPE|REPLY_TO|VOTE|POSITION|CONCLUSION)\s*[:：].*$/gim, '').trim();
+    const others = sp.length > 1 ? `<span class="more">+${sp.length - 1} 人同时发言</span>` : '';
+    el.innerHTML = `<b style="color:${colorOf(Number(focus.role_id))}">${esc(name)}</b><span class="sp">${esc(focus.speech || '')}</span>${others}<span class="tx">${focus.thinking && !txt ? '思考中…' : esc(pre + (txt.length > 150 ? '…' + txt.slice(-150) : txt))}<i class="caret"></i></span>`;
+    el.classList.remove('hidden');
+  }
+  function recordLiveLatency(lv) {
+    if (lv && lv.ts_ms) { const l = Date.now() - lv.ts_ms; if (l >= 0 && l < 60000) (Net.liveLat = Net.liveLat || []).push(l); }
   }
 
   // ---------------- frame for the 3D stage
@@ -377,17 +442,24 @@ function openSession(sid) {
       if (liveNow && st.state !== 'judging') {
         f.speakerId = st.speaking_id || null; f.addressId = st.addressing || null;
         f.thinkingId = st.speaking_id || null;
+        if (st.cx_pair && ph?.kind === 'cx') f.cxPair = st.cx_pair;
       } else if (m && (m.side === 'aff' || m.side === 'neg')) {
         f.speakerId = m.role_id; f.addressId = m.reply_to || null;
       }
-      if (liveNow && st.state === 'judging') f.thinkingId = 6;
+      if (!f.cxPair && ph?.kind === 'cx' && f.speakerId) f.cxPair = [ph.asker, ph.answerer];
+      if (f.speakerId) f.spotlight = f.speakerId;
+      if (liveNow && st.state === 'judging') { f.thinkingId = 6; f.spotlight = 6; }
       if (ph && f.speakerId) {
         f.atLectern = ph.kind !== 'cx' || f.speakerId === ph.answerer;
         f.speakKind = ph.kind === 'cx' && f.speakerId === ph.answerer ? 'answer' : ph.kind === 'rebuttal' ? 'rebut' : 'speak';
       }
       // timer
       const t = { label: ph?.label || (st.state === 'judging' ? '裁判评议中' : S.verdict ? '已宣判' : '赛前'), clock: '--:--', sub: '' };
-      if (liveNow && st.phase_deadline_ms) {
+      if (liveNow && st.state === 'judging' && st.judge_wait_until_ms && st.judge_status === 'waiting_herald') {
+        t.label = '等待 Gemini 传令官'; t.clock = fmtClock(Math.max(0, (st.judge_wait_until_ms - Date.now()) / 1000));
+        t.sub = '超时由 Claude Code CLI 兜底裁判';
+      } else if (liveNow && st.judge_status === 'fallback_claude') { t.label = '兜底裁判评议中'; t.clock = '⚖'; t.sub = 'Claude Code CLI'; }
+      else if (liveNow && st.phase_deadline_ms) {
         const remain = (st.phase_deadline_ms - Date.now()) / 1000;
         t.remain = remain; t.clock = fmtClock(Math.max(remain, -599)); t.over = remain < 0;
         if (st.paused) { t.remain = null; t.over = false; t.clock = '⏸ ' + fmtClock(Math.max(remain, 0)); }
@@ -406,14 +478,22 @@ function openSession(sid) {
       const st = S.status;
       if (liveNow) {
         f.thinkingId = nameToId(st.speaking);
+        const sp = liveSpeakers();
+        if (sp.length) {
+          const fid = Number(S.live.role_id) || Number(sp[0].role_id);
+          f.speakerId = fid; f.typingIds = sp.map((x) => Number(x.role_id));
+          const o = sp.find((x) => Number(x.role_id) !== fid);
+          f.thinkingId = o ? Number(o.role_id) : null;
+        }
         const recent = m && S.arrival.has(m.idx) ? performance.now() - S.arrival.get(m.idx) < 15000 : false;
-        if (m && recent && m.type !== 'vote') { f.speakerId = m.role_id; f.addressId = m.reply_to ? Number(m.reply_to) : null; }
+        if (!f.speakerId && m && recent && m.type !== 'vote') { f.speakerId = m.role_id; f.addressId = m.reply_to ? Number(m.reply_to) : null; }
         else if (f.thinkingId && st.addressing) f.addressId = Number(st.addressing);
       } else if (m) {
         if (m.type !== 'vote') { f.speakerId = m.role_id; f.addressId = m.reply_to ? Number(m.reply_to) : null; }
         else f.addressId = m.reply_to ? Number(m.reply_to) : null;
       }
-      f.speakKind = m?.type === 'rebuttal' && f.speakerId === m.role_id ? 'rebut' : 'speak';
+      f.speakKind = m && f.speakerId === m.role_id ? ({ rebuttal: 'rebut', retract: 'retract' }[m.type] || 'speak') : 'speak';
+      if (f.speakerId) f.spotlight = f.speakerId;
       const v = lastProposalVotes(shown);
       if (v) { f.votes = v.votes; f.voteInfo = v; }
       f.consensus = atTail && !!st.consensus;
@@ -470,6 +550,7 @@ function openSession(sid) {
           <div class="av">${esc((r?.name || m.role || '?').replace(/^(正方|反方)/, '').replace(/^[一二]辩·?/, '').slice(0, 1))}</div>
           <div><div class="hd"><b>${esc(r?.name || m.role || '')}</b><span class="tp" style="--tc:${col}">${esc(lab)}</span>${ph}${vote}<span style="color:var(--muted)">${to}</span><span class="t">${esc((m.ts || '').slice(11, 19))}</span></div>
           <div class="sm">${esc(short || plain(m.text, 60))}</div>${lim}
+          ${(m.assess || m.self_review) ? `<details class="think-proc"><summary>💭 思考过程</summary>${m.assess ? `<div class="tp-h">评估别人的论据</div><div class="md">${md(m.assess)}</div>` : ''}${m.self_review ? `<div class="tp-h">对照自己上一轮</div><div class="md">${md(m.self_review)}</div>` : ''}</details>` : ''}
           <div class="tx md">${md(m.text)}</div></div></div>`;
       }).join('');
       const paused = st.paused ? `<div class="tl-ann"><span style="background:#fff1d6;color:#7a5200">⏸ ${esc(st.paused)}</span></div>` : '';
@@ -485,21 +566,25 @@ function openSession(sid) {
     }
     if (!S.follow) { const cur = pane.querySelector('.tl-item.cur, .tl-ann.cur'); if (cur && S.playing) cur.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
   }
-  function kitHtml(k) {
-    if (!k) return '<div class="kit"><div class="desc">脚本/外部角色，不加载 skill。</div></div>';
-    return `<div class="kit"><div class="k">🧰 ${esc(k.label)} <span style="font-weight:500;color:var(--muted)">· ${esc(k.use_for)}</span></div>
-      <div>Skill：<code>${esc(k.skill.name)}</code> <span class="desc">${esc(plain(k.skill.description, 140))}</span></div>
-      <div class="src">来源 <a href="${esc(k.skill.url)}" target="_blank" rel="noopener">${esc(k.skill.repo)}</a><span class="star">★ ${Number(k.skill.stars).toLocaleString()}</span></div>
-      <div style="margin-top:6px">AGENTS.md 上游：<code>${esc(k.agents.name)}</code></div>
-      <div class="src">来源 <a href="${esc(k.agents.url)}" target="_blank" rel="noopener">${esc(k.agents.repo)}</a><span class="star">★ ${Number(k.agents.stars).toLocaleString()}</span></div></div>`;
+  function srcLinks(list) {
+    return (list || []).map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.repo)}</a>${x.stars ? `<span class="star">★ ${Number(x.stars).toLocaleString()}</span>` : ''}`).join(' · ');
+  }
+  function kitHtml(r) {
+    if (!r.kit) return `<div class="kit"><div class="desc">${r.side === 'judge' ? '裁判：主路径 Gemini 传令官（webhook → verdict.json），超时由 Claude Code CLI 兜底。' : r.side === 'chair' ? '主持·计时：脚本角色，不调用模型。' : '旧场次角色（升级前创建），未配置 skill。'}</div></div>`;
+    const skills = (r.skills || []).map((k) => `<div class="sk"><code>${esc(k.name)}</code> <span class="lic">${esc(k.license || '')}</span> <span class="desc">${esc(plain(k.description, 110))}</span>
+      <div class="src">${k.sources?.length ? '出处 ' + srcLinks(k.sources) : '本库原创'}</div></div>`).join('');
+    const a = r.agents_md;
+    return `<div class="kit"><div class="k">🧰 ${esc(r.kit_label || r.kit)} <span style="font-weight:500;color:var(--muted)">· ${esc(r.kit_use_for || '')}</span></div>
+      <div class="tp-h">Skills（pi --append-system-prompt 注入）</div>${skills}
+      ${a ? `<div class="tp-h">AGENTS.md 上游</div><div class="sk"><code>${esc(a.name)}</code> <span class="lic">${esc(a.license || '')}</span><div class="src">出处 ${srcLinks([a])}</div></div>` : ''}</div>`;
   }
   function roleCard(r, withHist) {
-    const side = { aff: '正方', neg: '反方', judge: '裁判', chair: '主持' }[r.side] || '';
+    const side = { aff: '正方', neg: '反方', judge: 'Gemini 裁判', chair: '主持' }[r.side] || '';
     const mine = withHist ? S.msgs.filter((m) => m.role_id === r.id && m.type !== 'announce') : [];
     return `<div class="role" data-r="${r.id}" style="--c:${colorOf(r.id)}"><div class="rh"><span class="av"></span><b>${esc(r.name)}</b>${side ? `<span class="sd ${r.side}">${side}</span>` : ''}</div>
-      <div class="ps">${esc(r.persona || '')}</div>${kitHtml(r.kit)}
-      ${r.workdir ? `<div style="font-size:11.5px;color:var(--muted);margin-top:6px">独立工作目录：<code>${esc(r.workdir)}</code>（含 AGENTS.md 与 .pi/skills/）</div>` : ''}
-      ${withHist ? `<details class="hist" ${mine.length ? 'open' : ''}><summary>发言历史（${mine.length}）</summary>${mine.map((m) => `<div class="tl-item" data-seek="${m.idx}" style="--c:${colorOf(r.id)};grid-template-columns:1fr"><div><div class="hd"><span class="tp" style="--tc:${typeMeta(m.type, mode())[1]}">${esc(typeMeta(m.type, mode())[0])}</span>${m.phase ? esc(m.phase) : ''}</div><div class="sm">${esc(m.short || plain(m.text, 60))}</div></div></div>`).join('')}</details>` : ''}</div>`;
+      <div class="ps">${esc(r.persona || '')}</div>${kitHtml(r)}
+      ${r.dir ? `<div style="font-size:11.5px;color:var(--muted);margin-top:6px">独立工作目录 <code>${esc(r.dir)}</code>：AGENTS.md、skills/、session.jsonl（持久记忆）</div>` : ''}
+      ${withHist ? `<details class="hist" ${mine.length ? 'open' : ''}><summary>发言历史（${mine.length}）</summary>${mine.map((m) => `<div class="tl-item" data-seek="${m.idx}" style="--c:${colorOf(r.id)};grid-template-columns:1fr"><div><div class="hd"><span class="tp" style="--tc:${typeMeta(m.type, mode())[1]}">${esc(typeMeta(m.type, mode())[0])}</span>${m.phase ? esc(m.phase) : ''}</div><div class="sm">${esc(m.short || plain(m.text, 60))}</div>${m.self_review ? `<div class="desc" style="font-size:12px;color:var(--muted)">自省：${esc(plain(m.self_review, 80))}</div>` : ''}</div></div>`).join('')}</details>` : ''}</div>`;
   }
   function renderRoles() {
     if (!S.roles.length) { $('pane').innerHTML = '<div class="tl-ann"><span>分配官正在安排角色…</span></div>'; return; }
@@ -513,13 +598,13 @@ function openSession(sid) {
     let cur = S.cursor >= S.msgs.length && running() ? st.phase_idx : ph.findIndex((p) => p.key === S.msgs[S.cursor - 1]?.phase);
     if (S.msgs[S.cursor - 1]?.phase === 'JUDGE' || (S.verdict && S.cursor >= S.msgs.length)) cur = ph.length;
     $('pane').innerHTML = `<div class="fmt"><h3>${esc(t.format_name || 'Policy 辩论（简化版）')}</h3>
-      <p>采用美式 <b>Policy 辩论</b>的结构并压缩为正反各 2 人：先立论、后质询（cross-examination），再驳论与总结；<b>正方最后发言</b>（与 Policy 惯例一致）。正方支持辩题，反方反对。</p>
+      <p>完整的美式 <b>Policy / CX</b> 赛制：正反各 2 人，4 篇建设性发言（1AC/1NC/2AC/2NC），每篇之后一轮<b>质询</b>（对方辩手提问、发言者作答，每轮 3 组问答），然后 4 篇反驳（1NR/1AR/2NR/2AR），<b>正方最后发言</b>。每位辩手有自己的持久记忆（独立 pi 会话），质询时记得自己的立论。</p>
       <ol class="phase-list">${ph.map((p, i) => `<li class="${i < cur ? 'done' : i === cur ? 'cur' : ''}"><span>${esc(p.label)}</span><span class="lm">${p.kind === 'cx' ? `${p.rounds} 问 · 问≤${p.q_chars} 答≤${p.a_chars} 字` : `≤${p.chars} 字`} · ${fmtClock(p.secs)}</span></li>`).join('')}
-        <li class="${S.verdict && cur >= ph.length ? 'done' : st.state === 'judging' ? 'cur' : ''}"><span>裁判评议与宣判</span><span class="lm">${esc(st.judge_backend || S.verdict?.backend || '')}</span></li></ol>
+        <li class="${S.verdict && cur >= ph.length ? 'done' : st.state === 'judging' ? 'cur' : ''}"><span>裁判评议与宣判</span><span class="lm">${esc(S.verdict ? ((S.verdict.judge || {}).label || '') : 'Gemini 传令官 / 兜底')}</span></li></ol>
       <h3>严格计时 / 限字</h3>
       <p>每个环节都有字数上限和发言时限（计时牌倒计时）。超出字数的部分<b>硬截断</b>并标注「超字截断」；模型在时限内没交出发言，该发言<b>作废</b>。质询的所有问答共享一个总时限，时间到即结束。违规会进入裁判「规则」分项扣分。等待上游模型（限流/额度/出错重试）的时间<b>不计入</b>发言时间，计时牌显示 ⏸。</p>
       <h3>裁判</h3>
-      <p>可插拔裁判接口：默认调用本机 <b>Claude Code CLI</b>（<code>claude -p</code>，附评分量表）；若服务器设置了 <code>GEMINI_API_KEY</code> 则改用 <b>Gemini API</b>。不使用 Antigravity。量表五项各 10 分：论证、证据、交锋、质询、规则；另给辩手分（26–30）。按 flow 判，未回应的论点视为成立。</p></div>`;
+      <p>主路径是 <b>Gemini 传令官</b>：赛后写出 <code>judge_request.json</code> 并通过 webhook 发出，等待 <code>verdict.json</code>；超过 15 分钟未收到，则由本机 <b>Claude Code CLI</b>（<code>claude -p</code>，同一量表）<b>兜底裁判</b>，界面会标明。不使用 Antigravity。量表五项各 10 分：论证、证据、交锋、质询、规则；另给辩手分（26–30）。按 flow 判，未回应的论点视为成立。</p></div>`;
   }
   function scoresHtml(v) {
     const rows = [['argument', '论证'], ['evidence', '证据'], ['clash', '交锋'], ['cross_ex', '质询'], ['rules', '规则']];
@@ -529,13 +614,13 @@ function openSession(sid) {
   function growBars(root) { requestAnimationFrame(() => setTimeout(() => root.querySelectorAll('.bar i').forEach((i) => { i.style.width = i.dataset.w + '%'; }), 60)); }
   function renderVerdictPane() {
     const v = S.verdict;
-    if (!v) { $('pane').innerHTML = `<div class="tl-ann"><span>${S.status.state === 'judging' ? '⚖️ 裁判评议中…' : '比赛结束后由裁判宣判'}</span></div>`; return; }
+    if (!v) { $('pane').innerHTML = `<div class="tl-ann"><span>${S.status.state === 'judging' ? (S.status.judge_status === 'fallback_claude' ? '⚖️ 兜底裁判（Claude Code CLI）评议中…' : '⚖️ 已发出 judge_request，等待 Gemini 传令官…') : '比赛结束后由裁判宣判'}</span></div>`; return; }
     const w = v.winner === 'aff' ? '正方' : '反方';
     $('pane').innerHTML = `<div class="vcard"><div style="font-size:12px;letter-spacing:.2em;opacity:.7">VERDICT · 判决</div><div class="w ${v.winner}">🏆 ${w}胜</div>${scoresHtml(v)}</div>
       <h3 style="font-size:15px;margin:6px 0">判决理由（RFD）</h3><div class="rfd">${esc(v.rfd)}</div>
       ${v.key_clashes?.length ? `<h3 style="font-size:15px;margin:12px 0 6px">关键交锋</h3><ol class="pts">${v.key_clashes.map((c) => `<li>${esc(c)}</li>`).join('')}</ol>` : ''}
       <h3 style="font-size:15px;margin:12px 0 6px">辩手分</h3><div class="pts">${(v.speaker_points || []).map((p) => `<div><b>${esc(p.name)}</b> ${p.points} <span style="color:var(--muted)">${esc(p.note || '')}</span></div>`).join('')}</div>
-      <p style="font-size:12px;color:var(--muted);margin-top:12px">裁判后端：${esc(v.backend)}（${esc(v.model || '')}）· ${esc(v.decided_at || '')}${v.elapsed_s ? ' · 用时 ' + v.elapsed_s + 's' : ''}</p>`;
+      <p style="font-size:12px;color:var(--muted);margin-top:12px">裁判：${(v.judge || {}).fallback ? '<b style="color:#b45309">兜底裁判</b>' : 'Gemini 传令官'} · ${esc((v.judge || {}).backend || v.backend || '')}（${esc((v.judge || {}).model || v.model || '')}）· ${esc(v.decided_at || '')}${v.elapsed_s ? ' · 用时 ' + v.elapsed_s + 's' : ''}</p>`;
     growBars($('pane'));
   }
   async function renderFinal() {
@@ -559,6 +644,15 @@ function openSession(sid) {
       vb.innerHTML = `<span>🗳️ 表决</span><span class="c" title="${esc(f.voteInfo.conclusion)}">${esc(f.voteInfo.conclusion)}</span><b class="a">✓ ${f.voteInfo.a}</b><b class="d">✗ ${f.voteInfo.d}</b><span style="color:var(--muted)">/ ${f.voteInfo.n}</span>`;
     } else vb.classList.add('hidden');
   }
+  function renderPhaseBar(f) {
+    const el = $('phasebar');
+    if (mode() !== 'debate' || !f.phases?.length) { el.classList.add('hidden'); return; }
+    const k = f.phaseIdx + '|' + f.phases.length + '|' + (S.verdict ? 1 : 0);
+    if (el._k === k) return; el._k = k;
+    el.innerHTML = f.phases.map((p, i) => `<span class="ps ${p.kind} ${i < f.phaseIdx ? 'done' : i === f.phaseIdx ? 'cur' : ''}" title="${esc(p.label)}">${esc(p.key.startsWith('CX') ? 'CX' : p.key)}</span>`).join('')
+      + `<span class="ps judge ${S.verdict ? 'done' : f.phaseIdx >= f.phases.length ? 'cur' : ''}" title="裁判宣判">⚖</span>`;
+    el.classList.remove('hidden');
+  }
   function renderTimerCard(f) {
     if (mode() !== 'debate' || !f.timer) return;
     $('tPh').textContent = f.timer.label; $('tClk').textContent = f.timer.clock; $('tSub').textContent = f.timer.sub || '';
@@ -570,7 +664,7 @@ function openSession(sid) {
     $('vbox').innerHTML = `<div class="gavel">🔨</div><div class="k">裁 判 宣 判</div>
       <div class="win ${v.winner}">${w}胜！</div><div class="score">${v.scores.aff.total} : ${v.scores.neg.total}</div>
       ${scoresHtml(v)}<div class="rfd">${esc(v.rfd)}</div>
-      <div class="by">裁判：${esc(v.backend)}（${esc(v.model || '')}）</div>
+      <div class="by">${(v.judge || {}).fallback ? '<b class="fb">兜底裁判</b> ' : '<b>Gemini 裁判</b> '}${esc((v.judge || {}).backend || v.backend || '')}（${esc((v.judge || {}).model || v.model || '')}）${v.mock_debate ? ' · 本场为 mock 演练' : ''}</div>
       <div class="mact" style="justify-content:center"><button class="btn small" id="vClose">关闭</button><button class="btn small ghost" id="vMore">查看判决详情</button></div>`;
     $('verdict').classList.add('on');
     growBars($('vbox'));
@@ -597,7 +691,7 @@ function openSession(sid) {
     if (!f.showVerdict) $('verdict').classList.remove('on');
   }
   // timer + live frame refresh (cheap)
-  uiTimer = setInterval(() => { const f = computeFrame(); stage?.update(f); renderTimerCard(f); }, 500);
+  uiTimer = setInterval(() => { const f = computeFrame(); stage?.update(f); renderTimerCard(f); renderLive(); renderPhaseBar(f); }, 400);
 
   // ---------------- replay controls
   function seek(n, fromUser) {
@@ -616,7 +710,7 @@ function openSession(sid) {
   function play() {
     clearTimeout(playTimer);
     if (!S.playing) return;
-    if (S.cursor >= S.msgs.length) { S.playing = false; S.follow = running(); renderAll(); return; }
+    if (S.cursor >= S.msgs.length) { S.playing = false; S.follow = running() || S.catchup; S.catchup = false; renderAll(); return; }
     seek(S.cursor + 1);
     playTimer = setTimeout(play, stepDelay());
   }
@@ -638,7 +732,7 @@ function openSession(sid) {
   $('tabs').onclick = (e) => { const b = e.target.closest('.tab'); if (b) setTab(b.dataset.t); };
   $('pane').onclick = (e) => {
     const it = e.target.closest('.tl-item[data-i]');
-    if (it && !e.target.closest('a')) {
+    if (it && !e.target.closest('a') && !e.target.closest('details')) {
       const i = +it.dataset.i;
       if (S.openItems.has(i)) S.openItems.delete(i); else S.openItems.add(i);
       it.classList.toggle('open');

@@ -326,6 +326,31 @@ class Bot {
   }
 }
 
+// ---------------------------------------------------------------- Gemini judge: four-point sparkle above the head
+function sparkleGeometry() {
+  const sh = new THREE.Shape();
+  const R = 0.22, r = 0.055;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2, rad = i % 2 === 0 ? R : r;
+    const x = Math.sin(a) * rad, y = Math.cos(a) * rad;
+    i === 0 ? sh.moveTo(x, y) : sh.lineTo(x, y);
+  }
+  sh.closePath();
+  return new THREE.ExtrudeGeometry(sh, { depth: 0.05, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.015, bevelSegments: 2 });
+}
+function addGeminiStar(b) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshToonMaterial({ color: 0x8ab4ff, emissive: 0x4b3bd6, emissiveIntensity: 0.6, gradientMap: gradTex });
+  const star = new THREE.Mesh(sparkleGeometry(), mat); star.position.z = -0.025; g.add(star);
+  const small = new THREE.Mesh(sparkleGeometry(), new THREE.MeshToonMaterial({ color: 0xc58af9, emissive: 0x7b2bd6, emissiveIntensity: 0.5, gradientMap: gradTex }));
+  small.scale.setScalar(0.45); small.position.set(0.24, 0.16, 0); g.add(small);
+  g.position.set(0, 0.62, 0);
+  b.head.add(g);
+  b.sparkle = g;
+  // robe: a wide cone body cover in Gemini blue-violet
+  mesh(G.cone, 0x5b6cff, { p: [0, 0.38, 0], s: [0.36, 0.62, 0.34], r: [Math.PI, 0, 0], cast: true, parent: b.body });
+}
+
 // ---------------------------------------------------------------- stage
 export function createStage(container, overlayRoot, opts = {}) {
   const renderer = new THREE.WebGLRenderer({ antialias: !IS_MOBILE, powerPreference: IS_MOBILE ? 'low-power' : 'high-performance' });
@@ -352,6 +377,11 @@ export function createStage(container, overlayRoot, opts = {}) {
   scene.add(sun);
 
   let world = new THREE.Group(); scene.add(world);
+  // speaker spotlight (scene-level, survives layout changes)
+  const focusSpot = new THREE.SpotLight(0xfff3d6, 0, 16, 0.32, 0.55, 1.2);
+  focusSpot.castShadow = false; scene.add(focusSpot, focusSpot.target);
+  const light0 = { hemi: 1.1, sun: 1.75 };
+  const cam = { userUntil: 0, base: null, dist: 0 };
   let layout = null;          // {mode, obstacles, homes, ...}
   let bots = new Map();       // id -> Bot
   let overlay = new Map();    // id -> {anchor, tag, think, bubble}
@@ -483,6 +513,18 @@ export function createStage(container, overlayRoot, opts = {}) {
       homes.set(r.id, home);
       facings.set(r.id, Math.atan2(toward.x, toward.y));
     }
+    // audience: two small stands at the front corners
+    const audCols = [0xe07a5f, 0x81b29a, 0xf2cc8f, 0x3d405b, 0x9c89b8, 0xf0a6ca, 0x6c9bd2, 0xc9a13b];
+    let ai = 0;
+    for (const sx of [-1, 1]) for (let row = 0; row < 2; row++) {
+      const z = 3.3 + row * 0.9, y = Y0 + row * 0.25;
+      mesh(G.box, 0x3b2a20, { p: [sx * 4.8, y + 0.2, z], s: [3.2, 0.4 + row * 0.5, 0.6], cast: true, recv: true, parent: world });
+      for (let i = 0; i < 4; i++) {
+        const x = sx * (3.6 + i * 0.8), c = audCols[ai++ % audCols.length];
+        mesh(G.torso, c, { p: [x, y + 0.62 + row * 0.25, z], s: [0.85, 0.85, 0.85], cast: true, parent: world });
+        mesh(G.sphereLo, 0xf1c7a0, { p: [x, y + 1.0 + row * 0.25, z], s: 0.2, cast: true, parent: world });
+      }
+    }
     // judge bench (raised) at back center
     const bench = new THREE.Group(); bench.position.set(0, Y0, -3.9); world.add(bench);
     mesh(G.box, 0x3b2618, { p: [0, 0.3, 0], s: [3.6, 0.6, 1.6], cast: true, recv: true, parent: bench });
@@ -527,6 +569,7 @@ export function createStage(container, overlayRoot, opts = {}) {
     const dir = layout.mode === 'debate' ? new THREE.Vector3(0, 0.36, 1).normalize() : new THREE.Vector3(0, 0.55, 1).normalize();
     camera.position.copy(controls.target).addScaledVector(dir, dist);
     controls.update();
+    cam.base = controls.target.clone(); cam.dist = dist;
   }
 
   // ------------------------------------------------ setup
@@ -558,7 +601,7 @@ export function createStage(container, overlayRoot, opts = {}) {
       b.facing = layout.facings.get(r.id) || 0;
       b.ground = layout.ground ? layout.ground(r.id) : 0;
       b.sit = layout.sitAtHome ? 1 : 0;
-      if (r.side === 'judge') { b.root.scale.setScalar(1.12); }
+      if (r.side === 'judge') { b.root.scale.setScalar(1.12); addGeminiStar(b); }
       bots.set(r.id, b);
       // overlay
       const anchor = document.createElement('div'); anchor.className = 'anchor';
@@ -573,6 +616,7 @@ export function createStage(container, overlayRoot, opts = {}) {
     });
     fitCamera();
     placeCamera();
+    light0.hemi = hemi.intensity; light0.sun = sun.intensity;
     celebrate = null;
   }
 
@@ -691,11 +735,13 @@ export function createStage(container, overlayRoot, opts = {}) {
       if (b.side === 'aff' || b.side === 'neg') return 'sad';
       if (b.side === 'judge') return 'gavel';
     }
+    if (f.cxPair && f.cxPair.includes(b.id)) return f.speakerId === b.id ? (f.cxPair[1] === b.id ? 'answer' : 'ask') : 'cx-wait';
     if (f.speakerId === b.id) return f.speakKind || 'speak';
-    if (f.thinkingId === b.id) return 'think';
+    if (f.thinkingId === b.id || (f.typingIds && f.typingIds.includes(b.id))) return 'think';
     if (f.votes && f.votes.has(b.id)) return 'voted';
     if (f.addressId === b.id) return 'listen';
     if (f.consensus) return 'cheer-lite';
+    if (f.speakerId && b.side !== 'judge') return 'listen';   // everyone else nods along
     return 'idle';
   }
 
@@ -704,6 +750,11 @@ export function createStage(container, overlayRoot, opts = {}) {
     const f = frame;
     if (layout.mode === 'debate') {
       if (b.side === 'judge' || b.side === 'chair') return { goal: home, sit: false };
+      if (f.cxPair && f.cxPair.includes(b.id)) {   // 质询：两人在讲台后方面对面
+        const x = b.side === 'aff' ? -0.85 : 0.85;
+        const other = bots.get(f.cxPair[0] === b.id ? f.cxPair[1] : f.cxPair[0]);
+        return { goal: new THREE.Vector2(x, -0.55), sit: false, faceTo: other };
+      }
       if ((role === 'speak' || role === 'answer') && f.atLectern) return { goal: tmp2.set(layout.lectern.x, layout.lectern.y - 0.55).clone(), sit: false, faceFront: true };
       return { goal: home, sit: false };
     }
@@ -738,13 +789,13 @@ export function createStage(container, overlayRoot, opts = {}) {
     const f = frame;
     const role = roleOf(b);
     if (role !== 'idle') b.idleGoal = null;
-    const { goal, sit, faceFront } = goalFor(b, role, now);
+    const { goal, sit, faceFront, faceTo } = goalFor(b, role, now);
     b.goal.copy(goal);
     const home = layout.homes.get(b.id);
     const atHome = home && b.pos.distanceTo(home) < 0.08;
     const wantSit = layout.sitAtHome && sit && atHome;
     b.sit = damp(b.sit, wantSit ? 1 : 0, 6, dt);
-    const speedMax = role === 'speak' || role === 'answer' ? 1.6 : 1.15;
+    const speedMax = ['speak', 'answer', 'ask', 'cx-wait', 'rebut'].includes(role) ? 1.6 : 1.15;
     const d = steer(b, dt, speedMax);
     // facing
     const speed = b.vel.length();
@@ -753,6 +804,7 @@ export function createStage(container, overlayRoot, opts = {}) {
     const homeFace = layout.facings.get(b.id) || 0;
     if (speed > 0.2) tf = Math.atan2(b.vel.x, b.vel.y);
     else if (b.sit > 0.3) tf = homeFace;
+    else if (faceTo && faceTo !== b) tf = Math.atan2(faceTo.pos.x - b.pos.x, faceTo.pos.y - b.pos.y);
     else if (faceFront) tf = 0;
     else if ((role === 'speak' || role === 'answer') && f.addressId && bots.get(f.addressId)) { const t = bots.get(f.addressId); tf = Math.atan2(t.pos.x - b.pos.x, t.pos.y - b.pos.y); }
     else if (role === 'gavel' || role === 'cheer' || role === 'sad') tf = layout.mode === 'debate' ? (b.side === 'judge' ? 0 : homeFace) : homeFace;
@@ -777,6 +829,14 @@ export function createStage(container, overlayRoot, opts = {}) {
       mix('aLx', -0.5 + Math.sin(now * 3) * 0.3); mix('aRx', -0.6 + Math.cos(now * 3.3) * 0.3);
       T.mouth = lerp(1, 0.5 + Math.abs(Math.sin(now * 13)) * 1.3, g);
       bounce = Math.abs(Math.sin(now * 5.2)) * 0.04 * g;
+    } else if (role === 'ask') {
+      mix('aRx', -1.4 + Math.sin(now * 6) * 0.12); mix('aRz', 0.15); mix('aLz', -0.4);
+      T.mouth = lerp(1, 0.6 + Math.abs(Math.sin(now * 13)) * 1.2, g); T.brow = g * 0.6;
+    } else if (role === 'retract') {
+      mix('aLz', -1.9 - Math.sin(now * 3) * 0.15); mix('aRz', 1.9 + Math.sin(now * 3) * 0.15); mix('aLx', -0.7); mix('aRx', -0.7);
+      mix('headTilt', 0.25); T.mouth = lerp(1, 0.6 + Math.abs(Math.sin(now * 10)) * 0.8, g);
+    } else if (role === 'cx-wait') {
+      mix('aLz', -0.35); mix('aRz', 0.35); mix('headNod', Math.sin(now * 2.5) * 0.05);
     } else if (role === 'rebut') {
       mix('aRx', -1.55 + Math.sin(now * 14) * 0.18); mix('aRz', 0.05); mix('aLz', -0.9); mix('aLx', 0.5);
       T.mouth = lerp(1, 0.6 + Math.abs(Math.sin(now * 15)) * 1.4, g); T.brow = g;
@@ -816,8 +876,9 @@ export function createStage(container, overlayRoot, opts = {}) {
     b.arms[0].rotation.set(c.aLx, 0, c.aLz); b.arms[1].rotation.set(c.aRx, 0, c.aRz);
     // head: always turn toward whoever is being looked at — including bots that already voted
     let look = null;
-    if (role === 'speak' || role === 'answer') look = f.addressId ? bots.get(f.addressId) : null;
-    else if (role === 'listen' || role === 'voted' || role === 'think' || role === 'idle' || role === 'cheer-lite') look = focus;
+    if (['speak', 'answer', 'ask', 'rebut', 'retract'].includes(role)) look = f.addressId ? bots.get(f.addressId) : null;
+    if (faceTo) look = faceTo;
+    else if (['listen', 'voted', 'think', 'idle', 'cheer-lite', 'cx-wait'].includes(role)) look = focus;
     if (f.addressId === b.id && focus) look = focus;   // 被点名 → 看向点名者
     let yaw = 0;
     if (look && look !== b) yaw = clamp(wrapAngle(Math.atan2(look.pos.x - b.pos.x, look.pos.y - b.pos.y) - b.facing), -1.2, 1.2);
@@ -827,6 +888,7 @@ export function createStage(container, overlayRoot, opts = {}) {
     b.mouth.scale.set(1, c.mouth, 1);
     b.brows[0].rotation.z = -(b.browBase + c.brow * 0.5); b.brows[1].rotation.z = b.browBase + c.brow * 0.5;
     if (b.propeller) b.propeller.rotation.y += dt * (6 + speed * 20);
+    if (b.sparkle) { b.sparkle.rotation.y += dt * (role === 'think' ? 3.5 : 0.8); b.sparkle.position.y = 0.62 + Math.sin(now * 2) * 0.03; }
     // paddle billboard
     const pv = role === 'voted' ? f.votes.get(b.id) : null;
     if (pv && b.gBlend > 0.3) {
@@ -872,6 +934,12 @@ export function createStage(container, overlayRoot, opts = {}) {
     if (!layoutOverlay.res || ++layoutOverlay.n % 15 === 0) layoutOverlay.res = opts.reserved?.() || [];
     layoutOverlay.n = layoutOverlay.n || 0;
     for (const r of layoutOverlay.res) placed.push(r);
+    for (const p of pts) {   // name tags are obstacles too
+      if (!p.vis) continue;
+      const o = p.o;
+      if (!o.tagW) o.tagW = o.tag.offsetWidth || 70;
+      placed.push({ x: p.x - o.tagW / 2, y: p.y + 6, w: o.tagW, h: 20 });
+    }
     const order = pts.filter((p) => want.has(p.id) && p.vis).sort((a, b) => want.get(a.id).prio - want.get(b.id).prio);
     for (const p of pts) {
       if (!want.has(p.id) || !p.vis) { if (p.o.shown) { p.o.bubble.classList.remove('show'); p.o.shown = false; } }
@@ -917,7 +985,8 @@ export function createStage(container, overlayRoot, opts = {}) {
   // ------------------------------------------------ picking
   const raycaster = new THREE.Raycaster(), ndc = new THREE.Vector2();
   let downAt = null;
-  renderer.domElement.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; controls.autoRotate = false; });
+  renderer.domElement.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; controls.autoRotate = false; cam.userUntil = performance.now() / 1000 + 25; });
+  renderer.domElement.addEventListener('wheel', () => { cam.userUntil = performance.now() / 1000 + 25; }, { passive: true });
   renderer.domElement.addEventListener('pointerup', (e) => {
     if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
     const r = renderer.domElement.getBoundingClientRect();
@@ -946,6 +1015,26 @@ export function createStage(container, overlayRoot, opts = {}) {
       drawSideBoard(f);
       if (layout.gavel) layout.gavel.rotation.z = celebrate && now - celebrate.t0 < 2.5 ? -Math.abs(Math.sin((now - celebrate.t0) * 9)) * 0.9 : 0;
     } else drawRoundBoard(f.boardTitle || '圆桌', f.boardSub || '', !!f.consensus);
+    // who is speaking? → spotlight + dim the rest + gentle camera push-in
+    const sb = frame.spotlight ? bots.get(frame.spotlight) : null;
+    const k = realDt;
+    if (sb) {
+      focusSpot.position.set(sb.pos.x + 0.6, sb.ground + 6.5, sb.pos.y + 2.2);
+      focusSpot.target.position.set(sb.pos.x, sb.ground + 0.8, sb.pos.y);
+    }
+    focusSpot.intensity = damp(focusSpot.intensity, sb ? (layout.mode === 'debate' ? 60 : 38) : 0, 4, k);
+    hemi.intensity = damp(hemi.intensity, light0.hemi * (sb ? 0.5 : 1), 3, k);
+    sun.intensity = damp(sun.intensity, light0.sun * (sb ? 0.55 : 1), 3, k);
+    for (const [id, o] of overlay) o.tag.classList.toggle('dim', !!sb && id !== frame.spotlight && !(frame.cxPair || []).includes(id));
+    if (cam.base && now > cam.userUntil && opts.autoCamera !== false) {
+      const want = sb ? cam.base.clone().lerp(new THREE.Vector3(sb.pos.x, sb.ground + 1.1, sb.pos.y), 0.45) : cam.base;
+      const wantDist = cam.dist * (sb ? 0.78 : 1);
+      const off = camera.position.clone().sub(controls.target);
+      const len = damp(off.length(), wantDist, 1.6, k);
+      controls.target.set(damp(controls.target.x, want.x, 1.6, k), damp(controls.target.y, want.y, 1.6, k), damp(controls.target.z, want.z, 1.6, k));
+      camera.position.copy(controls.target).addScaledVector(off.normalize(), len);
+      if (sb) controls.autoRotate = false;
+    }
     controls.update();
     renderer.render(scene, camera);
     layoutOverlay(realDt);
