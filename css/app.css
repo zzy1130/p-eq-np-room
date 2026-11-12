@@ -311,3 +311,35 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .vbox .rfd { max-height: 110px; }
   .vbox .mact { position: sticky; bottom: 0; background: #fffdf8; padding: 10px 0 12px; margin-top: 6px; }
 }
+
+/* ---- persona picker (人格辩手) ---- */
+.pickers { display: flex; flex-direction: column; gap: 8px; }
+.prow { display: grid; grid-template-columns: 44px 1fr 1fr; gap: 8px; align-items: stretch; }
+.pside { display: grid; place-items: center; font-weight: 800; font-size: 13px; border-radius: 10px; }
+.pside.aff { background: #dde7fb; color: #1d4fa8; } .pside.neg { background: #fde2e0; color: #9b2a22; }
+.pslot { display: grid; grid-template-columns: 44px 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left;
+  border: 1.5px dashed #cdbfae; background: #fffdf8; border-radius: 12px; padding: 6px 8px; min-height: 58px; }
+.pslot img, .pslot .auto { grid-row: 1 / 3; width: 44px; height: 44px; border-radius: 50%; }
+.pslot .auto { display: grid; place-items: center; background: #efe7da; color: #8a7d70; font-weight: 800; font-size: 13px; }
+.pslot b { font-size: 11.5px; color: var(--muted); } .pslot span { font-size: 14px; font-weight: 700; }
+.pslot.on { border-style: solid; border-color: var(--accent); background: #fff3e9; }
+.pnote { display: block; margin-top: 4px; color: var(--muted); font-size: 11.5px; }
+.ppick { position: absolute; inset: 16px; z-index: 120; background: var(--paper); border-radius: 18px; box-shadow: 0 30px 80px rgba(0,0,0,.35);
+  padding: 14px; overflow: auto; max-width: 860px; margin: auto; max-height: calc(100% - 32px); }
+.pphead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; position: sticky; top: -14px; background: var(--paper); padding: 6px 0; z-index: 1; }
+.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.pgrid.small { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); max-height: 260px; overflow: auto; padding: 2px; }
+.pcard { display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center; border: 1.5px solid var(--line); background: #fff;
+  border-radius: 12px; padding: 8px 6px; font-size: 12px; line-height: 1.35; }
+.pcard img, .pcard .autoav { width: 64px; height: 64px; border-radius: 50%; }
+.pgrid.small .pcard img { width: 48px; height: 48px; }
+.pcard .autoav { display: grid; place-items: center; background: #efe7da; color: #8a7d70; font-weight: 800; }
+.pcard b { font-size: 14px; } .pcard span { color: var(--muted); font-size: 11.5px; }
+.pcard .src { font-size: 10.5px; color: #1d4fa8; text-decoration: none; word-break: break-all; }
+.pcard.on { border-color: var(--accent); background: #fff3e9; box-shadow: 0 0 0 2px rgba(226,101,58,.25); }
+.pcard:disabled { opacity: .35; cursor: not-allowed; }
+.testrow { background: #eef5ea; color: #2f6b2a; }
+.role .av.img, .tl-item .av.img { background-size: cover; background-position: center; color: transparent; }
+.persona-badge { font-size: 10.5px; font-weight: 800; background: #f3e8ff; color: #6b21a8; border-radius: 5px; padding: 1px 6px; }
+@media (max-width: 900px) { .prow { grid-template-columns: 34px 1fr 1fr; } .pslot { grid-template-columns: 36px 1fr; } .pslot img, .pslot .auto { width: 36px; height: 36px; } .ppick { inset: 8px; } }
+.tl-item .av .avimg { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }

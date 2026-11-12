@@ -324,6 +324,122 @@ class Bot {
     this.R = R;
     return { main, light };
   }
+
+  // 人格辩手：按人物外形定制（发型、发色、胡子、眼镜、服装颜色、标志性配饰）。
+  // Keeps the same rig fields as build() so all animations, gestures and paddles still work.
+  buildPersona(L) {
+    while (this.root.children.length) this.root.remove(this.root.children[0]);
+    const R = this.root;
+    const body = new THREE.Group(); R.add(body); this.body = body;
+    const skin = L.skin || '#f1c7a0', hair = L.hair || '#2b2320';
+    const main = new THREE.Color(L.outfit_color || '#555555');
+    const accent = new THREE.Color(L.accent || '#c9a13b');
+    const light = main.clone().offsetHSL(0, -0.05, 0.18);
+    this.color = '#' + (main.getHSL({}).l < 0.25 || main.getHSL({}).l > 0.85 ? accent : main).getHexString();
+    const chub = L.build || 1;
+    const long = L.outfit === 'robe' || L.outfit === 'changshan';
+    const pants = L.accessory === 'jeans' ? '#2f4b7c' : long ? main : '#2c2c30';
+    const shoe = L.accessory === 'sandals' ? '#8b5a2b' : '#1f1b18';
+    this.legs = [-1, 1].map((s) => {
+      const p = new THREE.Group(); p.position.set(0.1 * s * chub, 0.3, 0); body.add(p);
+      mesh(G.leg, pants, { p: [0, -0.13, 0], cast: true, parent: p });
+      mesh(G.sphere, shoe, { p: [0, -0.27, 0.035], s: [0.09, 0.06, 0.125], cast: true, parent: p });
+      return p;
+    });
+    const torso = mesh(G.torso, main, { p: [0, 0.5, 0], s: [chub, 1, chub * 0.92], cast: true, recv: true, parent: body });
+    this.torso = torso;
+    const front = 0.2 * chub;
+    if (long) {   // robe / changshan: gown down to the ankles
+      mesh(G.cone, main, { p: [0, 0.3, 0], s: [0.3 * chub, 0.52, 0.27 * chub], r: [Math.PI, 0, 0], cast: true, parent: body });
+      if (L.outfit === 'robe') mesh(G.box, accent, { p: [0.02, 0.52, front - 0.01], s: [0.06, 0.42, 0.03], r: [0, 0, 0.6], parent: body });
+      else mesh(G.box, accent, { p: [0, 0.4, front], s: [0.05, 0.5, 0.02], parent: body });
+    }
+    if (L.outfit === 'turtleneck') mesh(G.cyl, main, { p: [0, 0.74, 0], s: [0.14, 0.09, 0.14], parent: body });
+    if (L.outfit === 'suit' || L.outfit === 'jacket') {
+      mesh(G.cone, '#ffffff', { p: [0, 0.63, front - 0.005], s: [0.08, 0.18, 0.02], r: [Math.PI, 0, 0], parent: body });
+      [-1, 1].forEach((s) => mesh(G.box, main.clone().offsetHSL(0, 0, -0.06), { p: [0.07 * s, 0.6, front + 0.005], s: [0.05, 0.2, 0.02], r: [0, 0, 0.35 * s], parent: body }));
+    }
+    if (L.outfit === 'shirt') [-1, 1].forEach((s) => mesh(G.box, light, { p: [0.05 * s, 0.72, 0.15], s: [0.07, 0.035, 0.03], r: [0, 0, -0.5 * s], parent: body }));
+    if (L.outfit === 'hoodie') {
+      mesh(G.torus, main.clone().offsetHSL(0, 0, -0.05), { p: [0, 0.74, -0.05], s: [0.17, 0.17, 0.7], r: [Math.PI / 2 - 0.3, 0, 0], parent: body });
+      [-1, 1].forEach((s) => mesh(G.cyl, accent, { p: [0.04 * s, 0.6, front], s: [0.008, 0.14, 0.008], parent: body }));
+    }
+    if (L.accessory === 'tie' || L.accessory === 'long-tie') {
+      const ln = L.accessory === 'long-tie' ? 0.32 : 0.18;
+      mesh(G.box, accent, { p: [0, 0.7 - ln / 2, front + 0.012], s: [0.05, ln, 0.015], parent: body });
+      mesh(G.cone, accent, { p: [0, 0.68 - ln, front + 0.012], s: [0.04, 0.06, 0.015], r: [Math.PI, 0, 0], parent: body });
+    }
+    if (L.accessory === 'x-logo') [-1, 1].forEach((s) => mesh(G.box, accent, { p: [0, 0.52, front + 0.004], s: [0.016, 0.11, 0.008], r: [0, 0, 0.6 * s], parent: body }));
+    // arms (sleeves in outfit colour, skin hands — children[1] is the hand for paddles)
+    this.arms = [-1, 1].map((s) => {
+      const p = new THREE.Group(); p.position.set(0.22 * s * chub, 0.66, 0); body.add(p);
+      mesh(G.arm, main, { p: [0, -0.11, 0], cast: true, parent: p });
+      mesh(G.sphere, skin, { p: [0, -0.23, 0], s: 0.072, parent: p });
+      return p;
+    });
+    const hand = (i) => this.arms[i];
+    if (L.accessory === 'mic') { const g = hand(1); mesh(G.cyl, '#222222', { p: [0, -0.3, 0.03], s: [0.02, 0.12, 0.02], parent: g }); mesh(G.sphereLo, '#444444', { p: [0, -0.37, 0.03], s: 0.04, parent: g }); }
+    if (L.accessory === 'camera') mesh(G.box, '#222222', { p: [0, -0.29, 0.05], s: [0.12, 0.08, 0.06], parent: hand(0) });
+    if (L.accessory === 'book') mesh(G.box, accent, { p: [0, -0.29, 0.05], s: [0.13, 0.17, 0.03], parent: hand(0) });
+    if (L.accessory === 'bongo') mesh(G.cyl, '#a0522d', { p: [0.1, -0.28, 0.06], s: [0.08, 0.12, 0.08], parent: hand(0) });
+    // head
+    const headPivot = new THREE.Group(); headPivot.position.set(0, 0.76, 0); body.add(headPivot); this.headPivot = headPivot;
+    const head = new THREE.Group(); head.position.set(0, 0.32, 0); headPivot.add(head); this.head = head;
+    mesh(G.sphere, skin, { s: [HEAD_R.x, HEAD_R.y, HEAD_R.z], cast: true, recv: true, parent: head });
+    [-1, 1].forEach((s) => mesh(G.sphere, skin, { p: [0.36 * s, 0, -0.02], s: [0.04, 0.07, 0.05], parent: head }));
+    const ex = 0.12, ey = 0.02;
+    this.eyes = [-1, 1].map((s) => {
+      const g = new THREE.Group(); const x = ex * s; g.position.set(x, ey, onHead(x, ey) - 0.02); head.add(g);
+      mesh(G.sphere, '#ffffff', { s: [0.07, 0.082, 0.04], parent: g });
+      mesh(G.sphere, '#231c1a', { p: [0, -0.005, 0.03], s: [0.043, 0.053, 0.025], parent: g });
+      mesh(G.sphereLo, '#ffffff', { p: [0.015, 0.02, 0.05], s: 0.013, parent: g });
+      return g;
+    });
+    const bald = L.hair_style === 'bald' || L.hair_style === 'bald-ring';
+    const browCol = bald ? (L.beard_color || hair) : hair;
+    this.browBase = 0.08;
+    this.brows = [-1, 1].map((s) => { const x = ex * s, y = ey + 0.11; return mesh(G.box, browCol, { p: [x, y, onHead(x, y) + 0.005], s: [0.08, 0.02, 0.02], r: [0, 0, 0.08 * s], parent: head }); });
+    [-1, 1].forEach((s) => { const x = 0.2 * s, y = -0.07; mesh(G.sphereLo, '#ff8f8f', { p: [x, y, onHead(x, y) - 0.01], s: [0.045, 0.025, 0.02], parent: head }); });
+    mesh(G.sphere, new THREE.Color(skin).offsetHSL(0, 0.05, -0.08), { p: [0, -0.035, onHead(0, -0.035) + 0.005], s: 0.028, parent: head });
+    const my = -0.12; const mouth = new THREE.Group(); mouth.position.set(0, my, onHead(0, my) - 0.005); head.add(mouth); this.mouth = mouth;
+    mesh(G.arc, '#5a2a22', { s: [0.045, 0.045, 0.045], r: [0, 0, Math.PI], parent: mouth });
+    // hair
+    const cap = (sy = 1, tilt = -0.42, col = hair, op = 1) => mesh(G.hemi, op < 1 ? toon(col, { transparent: true, opacity: op }) : col,
+      { p: [0, 0.015, -0.01], s: [HEAD_R.x + 0.02, (HEAD_R.y + 0.025) * sy, HEAD_R.z + 0.02], r: [tilt, 0, 0], cast: true, parent: head });
+    const st = L.hair_style;
+    if (st === 'short' || st === 'crew' || st === 'side' || st === 'swept' || st === 'topknot' || st === 'wavy') cap();
+    if (st === 'short-thin') cap(0.85, -0.55);
+    if (st === 'buzz') cap(0.95, -0.42, hair, 0.75);
+    if (st === 'crew') mesh(G.box, hair, { p: [0, 0.33, 0.02], s: [0.42, 0.06, 0.34], parent: head });
+    if (st === 'side') mesh(G.sphere, hair, { p: [-0.12, 0.27, 0.12], s: [0.2, 0.08, 0.17], r: [0, 0, 0.3], parent: head });
+    if (st === 'swept') mesh(G.sphere, hair, { p: [0, 0.3, -0.04], s: [0.32, 0.12, 0.3], r: [-0.3, 0, 0], parent: head });
+    if (st === 'wavy') for (let i = 0; i < 9; i++) { const a = (i / 9) * Math.PI * 2; mesh(G.sphereLo, hair, { p: [Math.cos(a) * 0.3, 0.2 + Math.sin(i * 1.7) * 0.06, Math.sin(a) * 0.28 - 0.04], s: 0.1, parent: head }); }
+    if (st === 'swoop') { cap(1.05); mesh(G.sphere, hair, { p: [0.04, 0.28, 0.16], s: [0.36, 0.11, 0.2], r: [0.35, 0.1, -0.12], cast: true, parent: head }); mesh(G.sphere, hair, { p: [0, 0.2, -0.2], s: [0.34, 0.16, 0.18], parent: head }); }
+    if (st === 'bald-ring') mesh(G.torus, hair, { p: [0, -0.02, -0.04], s: [0.35, 0.3, 0.55], r: [Math.PI / 2 + 0.25, 0, 0], parent: head });
+    if (st === 'topknot') mesh(G.sphere, hair, { p: [0, 0.4, -0.02], s: 0.1, cast: true, parent: head });
+    if (L.accessory === 'scholar-hat') { mesh(G.box, accent, { p: [0, 0.44, -0.02], s: [0.16, 0.12, 0.2], parent: head }); mesh(G.box, accent, { p: [0, 0.38, -0.02], s: [0.36, 0.03, 0.12], parent: head }); }
+    // beard / moustache
+    const bc = L.beard_color || hair;
+    if (L.beard === 'full') { mesh(G.sphere, bc, { p: [0, -0.2, 0.12], s: [0.3, 0.26, 0.24], cast: true, parent: head }); mouth.position.z += 0.06; }
+    if (L.beard === 'long') { mesh(G.cone, bc, { p: [0, -0.36, 0.17], s: [0.15, 0.38, 0.08], r: [Math.PI, 0, 0], cast: true, parent: head }); mesh(G.sphere, bc, { p: [0, -0.16, 0.2], s: [0.18, 0.09, 0.1], parent: head }); }
+    if (L.beard === 'short') mesh(G.sphere, bc, { p: [0, -0.18, 0.13], s: [0.27, 0.16, 0.2], parent: head });
+    if (L.beard === 'stubble') mesh(G.sphere, toon(bc, { transparent: true, opacity: 0.32 }), { p: [0, -0.15, 0.06], s: [0.33, 0.2, 0.3], parent: head });
+    if (L.beard === 'mustache') [-1, 1].forEach((s) => mesh(G.sphere, bc, { p: [0.05 * s, -0.075, onHead(0.04, -0.07) + 0.012], s: [0.07, 0.025, 0.03], r: [0, 0, 0.25 * s], parent: head }));
+    if (L.beard === 'walrus') [-1, 1].forEach((s) => mesh(G.sphere, bc, { p: [0.06 * s, -0.09, onHead(0.04, -0.08) + 0.015], s: [0.1, 0.05, 0.04], r: [0, 0, 0.45 * s], parent: head }));
+    if (L.accessory === 'pipe') { mesh(G.cyl, '#5a3a22', { p: [0.08, my - 0.02, onHead(0.08, my) + 0.05], s: [0.012, 0.12, 0.012], r: [Math.PI / 2, 0, 0.3], parent: head }); mesh(G.cyl, '#5a3a22', { p: [0.12, my - 0.0, onHead(0.08, my) + 0.12], s: [0.03, 0.05, 0.03], parent: head }); }
+    // glasses
+    if (L.glasses) {
+      const thick = L.glasses === 'thick', round = L.glasses === 'round';
+      const frame = thick || !round ? '#1f1f1f' : '#3a3a3a';
+      [-1, 1].forEach((s) => { const x = ex * s, z = onHead(x, ey) + 0.035;
+        mesh(round ? G.torus : G.torusSq, frame, { p: [x, ey, z], s: [round ? 0.085 : 0.105, round ? 0.085 : 0.09, thick ? 0.12 : 0.06], r: [0, 0, round ? 0 : Math.PI / 4], parent: head }); });
+      mesh(G.box, frame, { p: [0, ey + 0.01, onHead(0, ey) + 0.035], s: [0.08, 0.015, 0.015], parent: head });
+    }
+    this.propeller = null;
+    this.headScale = 1;
+    this.R = R;
+    return { main: new THREE.Color(this.color), light };
+  }
 }
 
 // ---------------------------------------------------------------- Gemini judge: four-point sparkle above the head
@@ -592,7 +708,8 @@ export function createStage(container, overlayRoot, opts = {}) {
         if (r.side === 'judge') hue = 0.12;
         if (r.side === 'chair') hue = 0.33;
       }
-      const { main } = b.build(mulberry32(hashStr(seed + '#' + r.id)), hue);
+      const { main } = r.look ? b.buildPersona(r.look) : b.build(mulberry32(hashStr(seed + '#' + r.id)), hue);
+      b.persona = r.persona_id || null;
       b.color = '#' + main.getHexString();
       b.name = r.name; b.side = r.side;
       if (layout.cushions.get(r.id)) layout.cushions.get(r.id).color.copy(main);

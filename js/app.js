@@ -184,7 +184,7 @@ $('filters').addEventListener('click', (e) => {
 // =====================================================================================
 // Submit modal
 // =====================================================================================
-function openModal() {
+var openModal = function () {
   if (Net.mode !== 'live') { toast('快照模式下不能提交，请等实时通道恢复'); return; }
   $('modal').classList.remove('hidden'); $('mErr').textContent = '';
   const saved = localStorage.getItem('arenaPass'); if (saved) $('fPass').value = saved;
@@ -193,10 +193,78 @@ function openModal() {
     if (h.running >= 2) $('mErr').textContent = '当前已有 2 场在进行，请稍后再试。';
   }).catch(() => {});
   setTimeout(() => $('fTopic').focus(), 50);
-}
+};
 $('newBtn').onclick = $('newBtn2').onclick = openModal;
 $('cancelBtn').onclick = () => $('modal').classList.add('hidden');
 $('modal').addEventListener('click', (e) => { if (e.target === $('modal')) $('modal').classList.add('hidden'); });
+// ---- persona picker (人格辩手，带头像)
+const Personas = { list: [], byId: new Map(), pick: { aff: [null, null], neg: [null, null], roundtable: [] }, loaded: null, data: new Map(), version: 0 };
+// avatars are inlined as data: URIs (fetched once) — <img> tags created inside the live timeline could stall behind the
+// page's long-lived connections, and data URIs also make the avatars independent of where the page is hosted.
+function assetUrl(p) { return Personas.data.get(p) || new URL(p, location.href).href; }
+function loadPersonas() {
+  if (!Personas.loaded) Personas.loaded = fetch(new URL('assets/personas.json', location.href).href + '?v=' + Date.now(), { cache: 'no-store' })
+    .then((r) => r.json()).then(async (j) => {
+      Personas.list = j.personas || []; Personas.byId = new Map(Personas.list.map((p) => [p.id, p]));
+      await Promise.all(Personas.list.map((p) => fetch(new URL(p.avatar, location.href).href).then((r) => r.text())
+        .then((t) => Personas.data.set(p.avatar, 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(t))).catch(() => {})));
+      Personas.version++;
+    })
+    .catch(() => { Personas.loaded = null; });
+  return Personas.loaded;
+}
+loadPersonas();
+window.__personas = Personas;
+const formMode = () => (new FormData($('form')).get('mode')) || 'debate';
+function chosenIds() { return [...Personas.pick.aff, ...Personas.pick.neg, ...Personas.pick.roundtable].filter(Boolean); }
+function slotHtml(side, i) {
+  const p = Personas.byId.get(Personas.pick[side][i]);
+  const lab = (side === 'aff' ? '正方' : '反方') + (i ? '二辩' : '一辩');
+  return `<button type="button" class="pslot ${p ? 'on' : ''}" data-side="${side}" data-i="${i}" title="${p ? esc(p.blurb) : '点击选择人格辩手'}">
+    ${p ? `<img src="${esc(assetUrl(p.avatar))}" alt="">` : '<span class="auto">AI</span>'}
+    <b>${lab}</b><span>${p ? esc(p.name) : '自动生成'}</span></button>`;
+}
+function renderPickers() {
+  const box = $('pickers'); if (!box) return;
+  if (formMode() === 'debate') {
+    $('pickLabel').textContent = '选辩手（可选：每方最多 2 位人格辩手，没选的位置由 AI 自动生成）';
+    box.innerHTML = ['aff', 'neg'].map((side) => `<div class="prow"><span class="pside ${side}">${side === 'aff' ? '正方' : '反方'}</span>${slotHtml(side, 0)}${slotHtml(side, 1)}</div>`).join('');
+  } else {
+    $('pickLabel').textContent = '选参与者（可选，最多 6 位人格角色；主持人、定稿人和其余角色由 AI 自动生成）';
+    box.innerHTML = `<div class="pgrid small">${Personas.list.map((p) => `<button type="button" class="pcard ${Personas.pick.roundtable.includes(p.id) ? 'on' : ''}" data-rt="${esc(p.id)}">
+      <img src="${esc(assetUrl(p.avatar))}" alt=""><b>${esc(p.name)}</b><span>${esc(p.blurb)}</span></button>`).join('')}</div>`;
+  }
+}
+function openPicker(side, i) {
+  const used = new Set(chosenIds()); const cur = Personas.pick[side][i];
+  const el = $('ppick');
+  el.innerHTML = `<div class="pphead"><b>选择${side === 'aff' ? '正方' : '反方'}${i ? '二辩' : '一辩'}</b><button type="button" class="btn ghost small" data-close>关闭</button></div>
+    <div class="pgrid"><button type="button" class="pcard auto ${cur ? '' : 'on'}" data-pid=""><span class="autoav">AI</span><b>AI 自动生成</b><span>由分配官按议题生成</span></button>
+    ${Personas.list.map((p) => `<button type="button" class="pcard ${cur === p.id ? 'on' : ''}" data-pid="${esc(p.id)}" ${used.has(p.id) && cur !== p.id ? 'disabled' : ''}>
+      <img src="${esc(assetUrl(p.avatar))}" alt="${esc(p.name)}"><b>${esc(p.name)}</b><span>${esc(p.blurb)}</span>
+      <a class="src" href="${esc(p.source.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(p.source.repo)} · ${esc(p.source.license)}</a></button>`).join('')}</div>`;
+  el.classList.remove('hidden');
+  el.onclick = (e) => {
+    if (e.target.closest('[data-close]')) { el.classList.add('hidden'); return; }
+    const c = e.target.closest('[data-pid]'); if (!c || c.disabled) return;
+    Personas.pick[side][i] = c.dataset.pid || null; el.classList.add('hidden'); renderPickers();
+  };
+}
+$('pickers').addEventListener('click', (e) => {
+  const s = e.target.closest('.pslot'); if (s) { openPicker(s.dataset.side, +s.dataset.i); return; }
+  const c = e.target.closest('[data-rt]');
+  if (c) {
+    const id = c.dataset.rt, l = Personas.pick.roundtable;
+    if (l.includes(id)) l.splice(l.indexOf(id), 1); else if (l.length < 6) l.push(id); else toast('最多选 6 位');
+    renderPickers();
+  }
+});
+const _openModal = openModal;
+openModal = function () { _openModal(); loadPersonas().then(renderPickers); };
+$('newBtn').onclick = $('newBtn2').onclick = openModal;
+$('form').addEventListener('change', (e) => {
+  if (e.target.name === 'mode') renderPickers();
+});
 $('form').addEventListener('change', (e) => {
   if (e.target.name !== 'mode') return;
   const deb = e.target.value === 'debate';
@@ -208,11 +276,15 @@ $('form').addEventListener('submit', async (e) => {
   const fd = new FormData($('form'));
   const body = { mode: fd.get('mode'), topic: String(fd.get('topic') || '').trim(), notes: String(fd.get('notes') || '').trim(), passcode: String(fd.get('passcode') || '') };
   if (fd.get('mock')) { body.mock = true; body.judge_wait_s = 300; }
+  if (fd.get('test')) body.test = true;
+  if (body.mode === 'debate') { if (chosenIds().length) body.personas = { aff: [...Personas.pick.aff], neg: [...Personas.pick.neg] }; }
+  else if (Personas.pick.roundtable.length) body.personas = [...Personas.pick.roundtable];
   $('submitBtn').disabled = true; $('mErr').textContent = '';
   try {
     const r = await API.submit(body);
     if ($('remember').checked) localStorage.setItem('arenaPass', body.passcode); else localStorage.removeItem('arenaPass');
     $('modal').classList.add('hidden'); $('form').reset();
+    Personas.pick = { aff: [null, null], neg: [null, null], roundtable: [] }; renderPickers();
     toast('已开场！分配官正在安排角色…');
     location.hash = '#/s/' + encodeURIComponent(r.sid);
   } catch (err) {
@@ -581,7 +653,7 @@ function openSession(sid) {
     if (S.tab !== 'tl') return;
     const st = S.status;
     const deb = mode() === 'debate';
-    const tlKey = [S.msgs.length, st.speaking, st.paused, st.state, st.calls, S.topic?.allocator?.rationale].join('|');
+    const tlKey = [Personas.version, S.msgs.length, st.speaking, st.paused, st.state, st.calls, S.topic?.allocator?.rationale].join('|');
     if (tlCount !== tlKey || tlSid !== sid || !pane.querySelector('.tl-list')) {
       const atBottom = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 80;
       tlCount = tlKey; tlSid = sid;
@@ -595,7 +667,7 @@ function openSession(sid) {
         const lim = (m.limit_chars || m.budget_chars) ? `<div class="lim ${m.truncated || m.overtime ? 'bad' : ''}">${msgRuleTxt(m)}</div>` : '';
         const short = m.type === 'vote' ? (m.position || m.short) : m.type === 'proposal' ? '表决：' + (m.conclusion || m.short) : m.short;
         return `<div class="tl-item${S.openItems.has(i) ? ' open' : ''}" data-i="${i}" style="--c:${colorOf(m.role_id)}">
-          <div class="av">${esc((r?.name || m.role || '?').replace(/^(正方|反方)/, '').replace(/^[一二]辩·?/, '').slice(0, 1))}</div>
+          <div class="av">${r?.avatar ? `<img class="avimg" src="${esc(assetUrl(r.avatar))}" alt="">` : esc((r?.name || m.role || '?').replace(/^(正方|反方)/, '').replace(/^[一二]辩·?/, '').slice(0, 1))}</div>
           <div><div class="hd"><b>${esc(r?.name || m.role || '')}</b><span class="tp" style="--tc:${col}">${esc(lab)}</span>${ph}${vote}<span style="color:var(--muted)">${to}</span><span class="t">${esc((m.ts || '').slice(11, 19))}</span></div>
           <div class="sm">${esc(short || plain(m.text, 60))}</div>${lim}
           ${(m.assess || m.self_review) ? `<details class="think-proc"><summary>💭 思考过程</summary>${m.assess ? `<div class="tp-h">评估别人的论据</div><div class="md">${md(m.assess)}</div>` : ''}${m.self_review ? `<div class="tp-h">对照自己上一轮</div><div class="md">${md(m.self_review)}</div>` : ''}</details>` : ''}
@@ -629,7 +701,8 @@ function openSession(sid) {
   function roleCard(r, withHist) {
     const side = { aff: '正方', neg: '反方', judge: 'Gemini 裁判', chair: '主持' }[r.side] || '';
     const mine = withHist ? S.msgs.filter((m) => m.role_id === r.id && m.type !== 'announce') : [];
-    return `<div class="role" data-r="${r.id}" style="--c:${colorOf(r.id)}"><div class="rh"><span class="av"></span><b>${esc(r.name)}</b>${side ? `<span class="sd ${r.side}">${side}</span>` : ''}</div>
+    return `<div class="role" data-r="${r.id}" style="--c:${colorOf(r.id)}"><div class="rh"><span class="av${r.avatar ? ' img' : ''}" ${r.avatar ? `style="background-image:url('${esc(assetUrl(r.avatar))}')"` : ''}></span><b>${esc(r.name)}</b>${side ? `<span class="sd ${r.side}">${side}</span>` : ''}${r.persona_id ? '<span class="persona-badge">人格辩手 · 风格模仿</span>' : ''}</div>
+      ${r.persona_source ? `<div class="kit" style="margin-top:6px"><div class="k">🎭 ${esc(r.persona_name)}（${esc(r.persona_en || '')}）· 风格模仿</div><div class="desc">${esc(r.persona_blurb || '')}</div><div class="src">人格 skill 出处 <a href="${esc(r.persona_source.url)}" target="_blank" rel="noopener">${esc(r.persona_source.repo)}</a>${r.persona_source.stars ? `<span class="star">★ ${Number(r.persona_source.stars).toLocaleString()}</span>` : ''} · ${esc(r.persona_source.license)}</div><div class="desc">不代表本人观点，不作事实断言；头像为生成的卡通形象。</div></div>` : ''}
       <div class="ps">${esc(r.persona || '')}</div>${kitHtml(r)}
       ${r.dir ? `<div style="font-size:11.5px;color:var(--muted);margin-top:6px">独立工作目录 <code>${esc(r.dir)}</code>：AGENTS.md、skills/、session.jsonl（持久记忆）</div>` : ''}
       ${withHist ? `<details class="hist" ${mine.length ? 'open' : ''}><summary>发言历史（${mine.length}）</summary>${mine.map((m) => `<div class="tl-item" data-seek="${m.idx}" style="--c:${colorOf(r.id)};grid-template-columns:1fr"><div><div class="hd"><span class="tp" style="--tc:${typeMeta(m.type, mode())[1]}">${esc(typeMeta(m.type, mode())[0])}</span>${m.phase ? esc(m.phase) : ''}</div><div class="sm">${esc(m.short || plain(m.text, 60))}</div>${m.self_review ? `<div class="desc" style="font-size:12px;color:var(--muted)">自省：${esc(plain(m.self_review, 80))}</div>` : ''}</div></div>`).join('')}</details>` : ''}</div>`;

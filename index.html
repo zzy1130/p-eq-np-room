@@ -90,6 +90,10 @@
         <input name="topic" id="fTopic" maxlength="120" required placeholder="例如：应当禁止宠物猫外出"></label>
       <label class="field"><span>补充说明（可选）</span>
         <textarea name="notes" rows="2" maxlength="500" placeholder="背景、限定范围、希望关注的角度…"></textarea></label>
+      <div class="field"><span id="pickLabel">选辩手（可选：每方最多 2 位人格辩手，没选的位置由 AI 自动生成）</span>
+        <div id="pickers" class="pickers"></div>
+        <small class="pnote">人格辩手均为「风格模仿」，人格 skill 来自 GitHub 开源仓库（MIT）；头像为程序生成的卡通形象。</small></div>
+      <label class="mockrow testrow"><input type="checkbox" name="test" id="fTest"> 测试场次（放在测试区，不进正式大厅）</label>
       <label class="mockrow"><input type="checkbox" name="mock" id="fMock"> 演练模式（mock 模型：真实 pi 流程，但不调用 ERNIE；场次放在测试区）</label>
       <label class="field"><span>口令</span>
         <input name="passcode" id="fPass" type="password" required placeholder="管理员提供的提交口令" autocomplete="current-password">
@@ -98,6 +102,7 @@
         <button type="button" class="btn ghost" id="cancelBtn">取消</button>
         <button type="submit" class="btn" id="submitBtn">开场</button></div>
     </form>
+    <div id="ppick" class="ppick hidden" role="dialog" aria-label="选择人格辩手"></div>
   </div>
   <div id="toast" class="toast hidden"></div>
   <script type="module" src="./js/app.js"></script>
