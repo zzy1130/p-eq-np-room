@@ -1,6 +1,7 @@
 // AI 圆桌 & 辩论厅 — app shell: discovery, realtime long-poll, snapshot fallback, replay, submit.
 import { createStage, IS_MOBILE } from './stage3d.js';
 import { esc, md, plain } from './mdlite.js';
+import { formatAsiaShanghai, formatClockAsiaShanghai, formatRelativeAsiaShanghai, hasAuthoritativeEndField, selectSessionTime, sortSessionsByTime } from './session_time.js';
 
 const PAGES = 'https://zzy1130.github.io/p-eq-np-room/';
 const REPO_API = 'https://api.github.com/repos/zzy1130/p-eq-np-room/contents/tunnel.json?ref=main';
@@ -23,7 +24,8 @@ const STATE_LABEL = { running: '进行中', allocating: '分配角色中', start
   consensus: '已达成共识', ended: '已结束', stopped: '已停止', error: '出错', stalled: '已中断', unknown: '未知' };
 const isActive = (st) => ['running', 'allocating', 'starting', 'judging'].includes(st);
 const fmtClock = (s) => { if (s == null || !isFinite(s)) return '--:--'; const neg = s < 0; s = Math.abs(Math.round(s)); return (neg ? '-' : '') + String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
-const ago = (ms) => { if (!ms) return ''; const d = (Date.now() - ms) / 1000; if (d < 60) return '刚刚'; if (d < 3600) return Math.floor(d / 60) + ' 分钟前'; if (d < 86400) return Math.floor(d / 3600) + ' 小时前'; return new Date(ms).toLocaleDateString('zh-CN'); };
+const ago = (ms) => formatRelativeAsiaShanghai(ms).text;
+function setHTML(el, html) { if (el && el._html !== html) { el.innerHTML = html; el._html = html; } }   // skip identical rebuilds (keeps tap/scroll/hover state)
 function toast(msg, ms = 2600) { const t = $('toast'); t.textContent = msg; t.classList.remove('hidden'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.add('hidden'), ms); }
 
 // =====================================================================================
@@ -62,11 +64,13 @@ async function tunnelFromApi() {
 function setConn(mode, text, title) {
   Net.mode = mode;
   const c = $('conn'); c.className = 'conn ' + mode; c.querySelector('span').textContent = text; c.title = title || '';
+  const c2 = $('conn2'); if (c2) { c2.className = 'conn-dot ' + mode; c2.title = text + (title ? '：' + title : ''); c2.setAttribute('aria-label', '连接状态：' + text); }
   const b = $('banner');
   if (mode === 'snap') { b.textContent = IS_MOBILE ? '实时通道连不上，已切到快照模式（约 1 分钟延迟），自动重连中…' : '实时通道暂时连不上，已切换到快照模式（约每分钟更新，可能有 1–2 分钟延迟）。正在后台自动重连…'; b.classList.remove('hidden'); }
   else b.classList.add('hidden');
   document.body.classList.toggle('banner-on', mode === 'snap');
   $('newBtn').disabled = $('newBtn2').disabled = mode === 'snap';
+  if (mode !== 'connecting' && !$('home').classList.contains('hidden')) loadHomeSys();
 }
 async function discover() {
   if (Net.discovering) return Net.discovering;
@@ -115,17 +119,18 @@ const API = {
       try { const j = await fetchJSON(Net.base + '/api/sessions' + (homeTest ? '?test=1' : '')); Net.fails = 0; return j.sessions; } catch (e) { noteFailure(); throw e; }
     }
     const j = await fetchJSON(PAGES + 'snap/sessions.json?t=' + Date.now());
+    Net.snapMs = j.snapshot_ms || null;
     return j.sessions;
   },
-  async bundle(sid) {
+  async bundle(sid, opt = {}) {
     if (Net.mode === 'live') {
-      try { const j = await fetchJSON(Net.base + '/api/s/' + encodeURIComponent(sid)); Net.fails = 0; return j; } catch (e) { if (e.status !== 404) noteFailure(); throw e; }
+      try { const j = await fetchJSON(Net.base + '/api/s/' + encodeURIComponent(sid), { signal: opt.signal }); Net.fails = 0; return j; } catch (e) { if (e.status !== 404 && e.name !== 'AbortError') noteFailure(); throw e; }
     }
-    return fetchJSON(PAGES + 'snap/s/' + encodeURIComponent(sid) + '.json?t=' + Date.now());
+    return fetchJSON(PAGES + 'snap/s/' + encodeURIComponent(sid) + '.json?t=' + Date.now(), { signal: opt.signal });
   },
-  async final(sid) {
-    if (Net.mode === 'live') return fetchJSON(Net.base + '/api/s/' + encodeURIComponent(sid) + '/final');
-    const b = await fetchJSON(PAGES + 'snap/s/' + encodeURIComponent(sid) + '.json?t=' + Date.now());
+  async final(sid, opt = {}) {
+    if (Net.mode === 'live') return fetchJSON(Net.base + '/api/s/' + encodeURIComponent(sid) + '/final', { signal: opt.signal });
+    const b = await fetchJSON(PAGES + 'snap/s/' + encodeURIComponent(sid) + '.json?t=' + Date.now(), { signal: opt.signal });
     return { exists: !!b.final_text, text: b.final_text || '' };
   },
   async submit(body) {
@@ -137,6 +142,8 @@ const API = {
 // Router
 // =====================================================================================
 let current = null;   // session controller
+let sessionEpoch = 0;
+let homeEpoch = 0;
 async function route(force) {
   const m = location.hash.match(/^#\/s\/([^/?]+)/);
   if (m) {
@@ -146,10 +153,14 @@ async function route(force) {
       try { current = openSession(sid); } catch (e) { console.error(e); }
     }
     $('home').classList.add('hidden'); $('session').classList.remove('hidden');
+    document.body.classList.add('in-session');
+    stage?.setRunning(!document.hidden);
     stopHome();
   } else {
     current?.close(); current = null;
     $('session').classList.add('hidden'); $('home').classList.remove('hidden');
+    document.body.classList.remove('in-session');
+    stage?.setRunning(false);   // no 3D frames while the lobby is shown
     startHome();
   }
 }
@@ -159,27 +170,228 @@ addEventListener('hashchange', () => route());
 // Home
 // =====================================================================================
 let homeTimer = 0, homeFilter = 'all', homeData = null, homeTest = /[?&]test=1/.test(location.search);
-function startHome() { clearTimeout(homeTimer); loadHome(); }
-function stopHome() { clearTimeout(homeTimer); }
-async function loadHome() {
-  try { homeData = await API.sessions(); renderHome(); } catch (e) { if (!homeData) $('cards').innerHTML = `<div class="empty">暂时取不到场次列表（${esc(e.message)}），稍后自动重试…</div>`; }
-  homeTimer = setTimeout(loadHome, Net.mode === 'live' ? 4000 : 30000);
+const HOME_META_CONCURRENCY = 3;
+const HOME_META_RETRY_MS = 30000;
+const homeMetaCache = new Map();
+let homeMetaAC = null;
+let homeMetaInFlight = 0;
+const homeMetaQueue = [];
+
+function homeMetaVersion(s) {
+  return `${Net.mode}:${s.state || ''}:${s.updated_ms || 0}:${s.n_msgs || 0}:${s.winner || ''}:${s.judge_label || ''}:${Net.mode === 'snap' ? (Net.snapMs || 0) : ''}`;
+}
+function homeMetaFor(s) {
+  if (!s?.sid) return null;
+  const e = homeMetaCache.get(s.sid);
+  if (!e || e.version !== homeMetaVersion(s)) return null;
+  if (e.status === 'loading') return { _loading: true };
+  return e.meta || null;
+}
+function extractTimeMeta(j) {
+  if (!j || typeof j !== 'object') return {};
+  return {
+    decided_at: j.verdict?.decided_at ?? j.decided_at ?? null,
+    ended_at: j.ended_at ?? j.status?.ended_at ?? null,
+    ended_ms: j.ended_ms ?? j.status?.ended_ms ?? null,
+    finished_at: j.finished_at ?? j.status?.finished_at ?? null,
+    finished_ms: j.finished_ms ?? j.status?.finished_ms ?? null,
+  };
+}
+async function fetchHomeMeta(s, signal) {
+  const sid = s.sid;
+  if (Net.mode === 'live') {
+    if (!Net.base) throw new Error('no live base');
+    const since = Math.max(0, Number(s.n_msgs) || 0);
+    const j = await fetchJSON(`${Net.base}/api/s/${encodeURIComponent(sid)}/poll?since=${since}&sv=-1`, { timeout: 8000, signal });
+    return extractTimeMeta(j);
+  }
+  const b = await fetchJSON(`${PAGES}snap/s/${encodeURIComponent(sid)}.json?v=${encodeURIComponent(Net.snapMs || 0)}`, { timeout: 8000, signal });
+  return extractTimeMeta(b);
+}
+function pumpHomeMeta(epoch) {
+  if (epoch !== homeEpoch || current || location.hash.startsWith('#/s/')) return;
+  const ac = homeMetaAC;
+  if (!ac || ac.signal.aborted) return;
+  while (homeMetaInFlight < HOME_META_CONCURRENCY && homeMetaQueue.length) {
+    const item = homeMetaQueue.shift();
+    if (item.epoch !== homeEpoch || ac.signal.aborted) continue;
+    const cur = homeMetaCache.get(item.sid);
+    if (cur && cur.version === item.version && (cur.status === 'done' || cur.status === 'loading')) continue;
+    homeMetaCache.set(item.sid, { version: item.version, status: 'loading', meta: null, retryAfter: 0 });
+    homeMetaInFlight++;
+    fetchHomeMeta(item.session, ac.signal)
+      .then((meta) => {
+        if (item.epoch !== homeEpoch || ac.signal.aborted || current || location.hash.startsWith('#/s/')) {
+          const latest = homeMetaCache.get(item.sid);
+          if (latest && latest.status === 'loading' && latest.version === item.version) homeMetaCache.delete(item.sid);
+          return;
+        }
+        homeMetaCache.set(item.sid, { version: item.version, status: 'done', meta, retryAfter: 0 });
+        renderHome();
+      })
+      .catch((err) => {
+        const latest = homeMetaCache.get(item.sid);
+        if (item.epoch !== homeEpoch || ac.signal.aborted || current || location.hash.startsWith('#/s/')) {
+          if (latest && latest.status === 'loading' && latest.version === item.version) homeMetaCache.delete(item.sid);
+          return;
+        }
+        const retryAfter = err?.status === 404 ? Infinity : Date.now() + HOME_META_RETRY_MS;
+        homeMetaCache.set(item.sid, { version: item.version, status: 'error', meta: null, retryAfter });
+        renderHome();
+      })
+      .finally(() => {
+        homeMetaInFlight = Math.max(0, homeMetaInFlight - 1);
+        pumpHomeMeta(epoch);
+      });
+  }
+}
+function refreshHomeMeta(list, epoch) {
+  if (epoch !== homeEpoch || current || location.hash.startsWith('#/s/')) return;
+  if (!homeMetaAC || homeMetaAC.signal.aborted) homeMetaAC = new AbortController();
+  const nowMs = Date.now();
+  const ordered = sortSessionsByTime(list, homeMetaFor, nowMs);
+  for (const s of ordered) {
+    if (!s?.sid || isActive(s.state) || hasAuthoritativeEndField(s)) continue;
+    if (Net.mode === 'live' && !Net.base) continue;
+    const version = homeMetaVersion(s);
+    const prev = homeMetaCache.get(s.sid);
+    if (prev && prev.version === version) {
+      if (prev.status === 'done' || prev.status === 'loading') continue;
+      if (prev.status === 'error' && nowMs < prev.retryAfter) continue;
+    }
+    const qIdx = homeMetaQueue.findIndex((q) => q.sid === s.sid);
+    if (qIdx >= 0) {
+      homeMetaQueue[qIdx] = { sid: s.sid, session: s, version, epoch };
+      continue;
+    }
+    homeMetaQueue.push({ sid: s.sid, session: s, version, epoch });
+  }
+  pumpHomeMeta(epoch);
+}
+
+function startHome() {
+  clearTimeout(homeTimer);
+  const epoch = ++homeEpoch;
+  homeMetaAC?.abort();
+  homeMetaAC = new AbortController();
+  homeMetaQueue.length = 0;
+  loadHome(epoch);
+  loadHomeSys(epoch);
+}
+function stopHome() {
+  homeEpoch++;
+  clearTimeout(homeTimer);
+  homeMetaAC?.abort();
+  homeMetaAC = null;
+  homeMetaQueue.length = 0;
+  for (const [sid, entry] of homeMetaCache) {
+    if (entry.status === 'loading') homeMetaCache.delete(sid);
+  }
+}
+async function loadHome(epoch = homeEpoch) {
+  try {
+    const list = await API.sessions();
+    if (epoch !== homeEpoch || current || location.hash.startsWith('#/s/')) return;
+    homeData = list;
+    renderHome();
+    refreshHomeMeta(list, epoch);
+  }
+  catch (e) {
+    if (epoch !== homeEpoch || current || location.hash.startsWith('#/s/')) return;
+    if (!homeData) {
+      setHTML($('cards'), `<div class="empty">暂时取不到场次列表（${esc(e.message)}），稍后自动重试。</div>`);
+      setHTML($('homeNow'), `<div class="now-empty"><p class="now-k">暂时取不到场次状态</p><p class="now-note">${esc(e.message)}。正在自动重试。</p></div>`);
+    }
+  }
+  if (epoch !== homeEpoch || current || location.hash.startsWith('#/s/')) return;
+  clearTimeout(homeTimer);
+  homeTimer = setTimeout(() => loadHome(epoch), Net.mode === 'live' ? 4000 : 30000);
+}
+// model / judge line under "怎么运作": only from the live server's own /api/health — never guessed
+let homeSysFor = null;
+function loadHomeSys(epoch = homeEpoch) {
+  const el = $('homeSys'); if (!el) return;
+  if (Net.mode !== 'live' || !Net.base) { el.textContent = Net.mode === 'snap' ? '快照模式：模型与裁判配置需连上实时服务后显示。' : ''; homeSysFor = null; return; }
+  if (homeSysFor === Net.base) return;
+  homeSysFor = Net.base;
+  fetchJSON(Net.base + '/api/health', { timeout: 6000 }).then((h) => {
+    if (epoch !== homeEpoch || current || location.hash.startsWith('#/s/')) return;
+    const backend = h.model_backend === 'agy' ? 'pi-agy' : (h.model_backend || '');
+    const model = h.model ? String(h.model) : '';
+    const judgeS = h.judge_wait_s ? `${h.judge_wait_s} 秒` : '超时';
+    el.textContent = (backend || model ? `辩手模型：${[backend, model].filter(Boolean).join(' / ')}。` : '') +
+      `裁判：Gemini 传令官主判，${judgeS}未到由 Claude Code CLI 兜底；晚到的主裁决会自动替换兜底结果。`;
+  }).catch(() => { homeSysFor = null; });
+}
+const sideTxt = (w) => (w === 'aff' ? '正方' : w === 'neg' ? '反方' : '');
+const fmtTime = (ms) => formatAsiaShanghai(ms);
+function stateText(s) {
+  let st = STATE_LABEL[s.state] || s.state;
+  if (s.state === 'judged' && s.winner) st = `已宣判 · ${sideTxt(s.winner)}胜${s.judge_label === '兜底裁判' ? '（兜底）' : ''}`;
+  if (s.state === 'running' && s.phase_label) st = '进行中 · ' + s.phase_label;
+  return st;
+}
+function renderHomeNow(all) {
+  const el = $('homeNow'); if (!el) return;
+  const nowMs = Date.now();
+  const snapNote = Net.mode === 'snap' ? `<p class="now-snap">快照数据${Net.snapMs ? '，生成于 ' + esc(fmtTime(Net.snapMs)) : ''}；实时通道恢复后自动刷新。</p>` : '';
+  const active = sortSessionsByTime(all.filter((s) => isActive(s.state)), homeMetaFor, nowMs);
+  if (active.length) {
+    setHTML(el, snapNote + active.slice(0, 2).map((s) => {
+      const deb = s.mode === 'debate';
+      const t = selectSessionTime(s, homeMetaFor(s), nowMs);
+      return `<a class="now-card" href="#/s/${encodeURIComponent(s.sid)}">
+        <span class="now-row"><span class="badge ${deb ? 'db' : 'rt'}">${deb ? '美式辩论' : '圆桌讨论'}</span><span class="state ${esc(s.state)}">${esc(stateText(s))}</span>${s.test ? '<span class="state">测试</span>' : ''}</span>
+        <span class="now-topic">${esc(s.topic || s.sid)}</span>
+        <span class="now-meta">${s.n_msgs || 0} 条发言 · ${esc(t.listText)}</span>
+        <span class="btn now-go">进入观战</span></a>`;
+    }).join(''));
+    return;
+  }
+  const done = sortSessionsByTime(all.filter((s) => !isActive(s.state)), homeMetaFor, nowMs);
+  const last = done[0];
+  const lastTime = last ? selectSessionTime(last, homeMetaFor(last), nowMs) : null;
+  setHTML(el, snapNote + `<div class="now-empty"><p class="now-k">现在没有进行中的场次</p>${last ? `
+    <a class="now-latest" href="#/s/${encodeURIComponent(last.sid)}">
+      <span class="now-l">${esc(lastTime.cardLabel)}</span>
+      <span class="now-topic">${esc(last.topic || last.sid)}</span>
+      <span class="now-res">${last.mode === 'debate' && last.winner ? `<b class="win-${esc(last.winner)}">${sideTxt(last.winner)}胜</b><span>${esc(last.judge_label || '')}</span>` : `<b>${esc(STATE_LABEL[last.state] || last.state || '')}</b>`}</span>
+      <span class="now-go-l">${last.mode === 'debate' ? '查看判决与报告' : '查看讨论'}</span></a>` : '<p class="now-note">还没有场次，发起第一场吧。</p>'}</div>`);
+}
+function renderHomeStats(all) {
+  const el = $('homeStats'); if (!el) return;
+  const deb = all.filter((s) => s.mode === 'debate' && !s.test && !s.mock && s.state === 'judged');
+  if (!deb.length) { el.textContent = ''; return; }
+  const a = deb.filter((s) => s.winner === 'aff').length, n = deb.filter((s) => s.winner === 'neg').length;
+  el.innerHTML = `已宣判 <b>${deb.length}</b> 场辩论：<span class="win-aff">正方 ${a} 胜</span>，<span class="win-neg">反方 ${n} 胜</span>。`;
 }
 function renderHome() {
-  const list = (homeData || []).filter((s) => homeFilter === 'all' || (homeFilter === 'running' ? isActive(s.state) : s.mode === homeFilter));
-  if (!list.length) { $('cards').innerHTML = `<div class="empty">还没有场次。点右上角「＋ 发起」开一场吧。</div>`; return; }
-  $('cards').innerHTML = list.map((s) => {
+  const all = homeData || [];
+  const nowMs = Date.now();
+  renderHomeNow(all); renderHomeStats(all);
+  const list = sortSessionsByTime(
+    all.filter((s) => homeFilter === 'all' || (homeFilter === 'running' ? isActive(s.state) : s.mode === homeFilter)),
+    homeMetaFor,
+    nowMs,
+  );
+  const cnt = $('homeCount'); if (cnt) cnt.textContent = list.length ? `${list.length} 场` : '';
+  if (!list.length) {
+    setHTML($('cards'), `<div class="empty">${homeFilter === 'running' ? '现在没有进行中的场次。' : '还没有场次。'}${Net.mode === 'live' ? '点「发起」开一场。' : ''}</div>`);
+    return;
+  }
+  const html = list.map((s) => {
     const deb = s.mode === 'debate';
-    let st = STATE_LABEL[s.state] || s.state;
-    if (s.state === 'judged' && s.winner) st = `已宣判 · ${s.winner === 'aff' ? '正方' : '反方'}胜${s.judge_label === '兜底裁判' ? '（兜底）' : ''}`;
-    if (s.state === 'running' && s.phase_label) st = '进行中 · ' + s.phase_label;
-    return `<a class="card" href="#/s/${encodeURIComponent(s.sid)}">
+    const win = s.state === 'judged' && s.winner ? ` win-${esc(s.winner)}` : '';
+    const t = selectSessionTime(s, homeMetaFor(s), nowMs);
+    const createdExtra = !t.active && t.status !== 'ok' && t.createdAbsText ? `<span>创建于 ${esc(t.createdAbsText)}</span>` : '';
+    return `<a class="card row-card${win}" href="#/s/${encodeURIComponent(s.sid)}" data-sid="${esc(s.sid)}">
       <div class="row"><span class="badge ${deb ? 'db' : 'rt'}">${deb ? '美式辩论' : '圆桌讨论'}</span>
-        <span class="state ${esc(s.state)}">${esc(st)}</span></div>
+        <span class="state ${esc(s.state)}">${esc(stateText(s))}</span>${s.mock ? '<span class="state">演练·mock</span>' : ''}${s.test ? '<span class="state">测试</span>' : ''}${s.legacy ? '<span class="state">存档</span>' : ''}</div>
       <h3>${esc(s.topic || s.sid)}</h3>
-      <div class="meta">${s.mock ? '<span class="state">演练·mock</span>' : ''}${s.test ? '<span class="state">测试</span>' : ''}<span>🤖 ${s.n_roles || '—'} 个 bot</span><span>💬 ${s.n_msgs || 0} 条</span><span>${esc(ago(s.created_ms))}</span>${s.legacy ? '<span>存档</span>' : ''}</div>
+      <div class="meta"><span>${s.n_roles || '—'} 位${deb ? '辩手' : '角色'}</span><span>${s.n_msgs || 0} 条发言</span><span>${esc(t.listText)}</span>${createdExtra}</div>
     </a>`;
   }).join('');
+  setHTML($('cards'), html);
 }
 $('filters').addEventListener('click', (e) => {
   if (e.target.closest('#testToggle')) { homeTest = !homeTest; $('testToggle').classList.toggle('on', homeTest); loadHome(); return; }
@@ -194,17 +406,27 @@ $('filters').addEventListener('click', (e) => {
 // =====================================================================================
 var openModal = function () {
   if (Net.mode !== 'live') { toast('快照模式下不能提交，请等实时通道恢复'); return; }
-  $('modal').classList.remove('hidden'); $('mErr').textContent = '';
+  $('modal').classList.remove('hidden'); document.body.classList.add('modal-open'); $('mErr').textContent = '';
   const saved = localStorage.getItem('arenaPass'); if (saved) $('fPass').value = saved;
   fetchJSON(Net.base + '/api/health', { timeout: 5000 }).then((h) => {
-    if (h.quota_blocked_until_ms) $('mErr').textContent = `注意：上游免费额度今日已用尽，约 ${new Date(h.quota_blocked_until_ms).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 重置，之前提交会被拒绝。`;
+    if (h.quota_blocked_until_ms) $('mErr').textContent = `注意：上游免费额度今日已用尽，约 ${formatClockAsiaShanghai(h.quota_blocked_until_ms)} 重置，之前提交会被拒绝。`;
     if (h.running >= 2) $('mErr').textContent = '当前已有 2 场在进行，请稍后再试。';
   }).catch(() => {});
-  setTimeout(() => $('fTopic').focus(), 50);
+  if (!matchMedia('(pointer: coarse)').matches) setTimeout(() => $('fTopic').focus(), 50);   // phones: don't pop the keyboard over the form on open
 };
-$('newBtn').onclick = $('newBtn2').onclick = openModal;
-$('cancelBtn').onclick = () => $('modal').classList.add('hidden');
-$('modal').addEventListener('click', (e) => { if (e.target === $('modal')) $('modal').classList.add('hidden'); });
+function closeModal() { $('modal').classList.add('hidden'); $('ppick').classList.add('hidden'); document.body.classList.remove('modal-open'); }
+// keyboard / address bar: the sheet follows the *visual* viewport so the action bar stays above the on-screen keyboard
+function syncVV() {
+  const vv = window.visualViewport;
+  document.documentElement.style.setProperty('--vvh', Math.round(vv ? vv.height : innerHeight) + 'px');
+}
+syncVV();
+window.visualViewport?.addEventListener('resize', syncVV);
+addEventListener('resize', syncVV);
+$('newBtn').addEventListener('click', () => openModal());
+$('newBtn2').addEventListener('click', () => openModal());
+$('cancelBtn').addEventListener('click', closeModal);
+$('modal').addEventListener('click', (e) => { if (e.target === $('modal')) closeModal(); });
 // ---- persona picker (人格辩手，带头像)
 const Personas = { list: [], byId: new Map(), pick: { aff: [null, null], neg: [null, null], roundtable: [] }, loaded: null, data: new Map(), version: 0 };
 // avatars are inlined as data: URIs (fetched once) — <img> tags created inside the live timeline could stall behind the
@@ -277,30 +499,44 @@ function renderPickers() {
     box.innerHTML = ['aff', 'neg'].map((side) => `<div class="prow"><span class="pside ${side}">${side === 'aff' ? '正方' : '反方'}</span>${slotHtml(side, 0)}${slotHtml(side, 1)}</div>`).join('');
   } else {
     $('pickLabel').textContent = '选参与者（可选，最多 6 位人格角色；主持人、定稿人和其余角色由 AI 自动生成）';
-    box.innerHTML = `<div class="pgrid small">${Personas.list.map((p) => `<button type="button" class="pcard ${Personas.pick.roundtable.includes(p.id) ? 'on' : ''}" data-rt="${esc(p.id)}" title="${esc(p.avatar_credit?.attribution_text || '')}">
-      <img src="${esc(assetUrl(p.avatar))}" alt="${esc(p.name)}"><b>${esc(p.name)}</b><span>${esc(p.blurb)}</span>${avatarCreditLine(p.avatar_credit, false)}</button>`).join('')}</div>`;
+    box.innerHTML = `<div class="pgrid small">${Personas.list.map((p) => `<div class="pcard ${Personas.pick.roundtable.includes(p.id) ? 'on' : ''}">
+      <button type="button" class="pcard-btn" data-rt="${esc(p.id)}" title="${esc(p.avatar_credit?.attribution_text || '')}">
+        <img src="${esc(assetUrl(p.avatar))}" alt="${esc(p.name)}"><b>${esc(p.name)}</b><span>${esc(p.blurb)}</span>
+      </button>
+      <details class="pcard-lic"><summary>来源与授权</summary>${avatarCreditLine(p.avatar_credit, false)}</details>
+    </div>`).join('')}</div>`;
   }
 }
+let ppickTarget = null;
 function openPicker(side, i) {
+  ppickTarget = { side, i };
   const used = new Set(chosenIds()); const cur = Personas.pick[side][i];
   const el = $('ppick');
-  el.innerHTML = `<div class="pphead"><b>选择${side === 'aff' ? '正方' : '反方'}${i ? '二辩' : '一辩'}</b><button type="button" class="btn ghost small" data-close>关闭</button></div>
+  el.innerHTML = `<div class="pphead"><b>选择${side === 'aff' ? '正方' : '反方'}${i ? '二辩' : '一辩'}</b><button type="button" class="btn ghost small pp-close" data-close>关闭</button></div>
     <div class="pgrid"><button type="button" class="pcard auto ${cur ? '' : 'on'}" data-pid=""><span class="autoav">AI</span><b>AI 自动生成</b><span>由分配官按议题生成</span></button>
-    ${Personas.list.map((p) => `<button type="button" class="pcard ${cur === p.id ? 'on' : ''}" data-pid="${esc(p.id)}" ${used.has(p.id) && cur !== p.id ? 'disabled' : ''} title="${esc(p.avatar_credit?.attribution_text || '')}">
-      <img src="${esc(assetUrl(p.avatar))}" alt="${esc(p.name)}"><b>${esc(p.name)}</b><span>${esc(p.blurb)}</span>
-      <a class="src" href="${esc(p.source.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(p.source.repo)} · ${esc(p.source.license)}</a>
-      ${avatarCreditLine(p.avatar_credit, true)}</button>`).join('')}</div>`;
+    ${Personas.list.map((p) => `<div class="pcard ${cur === p.id ? 'on' : ''} ${used.has(p.id) && cur !== p.id ? 'disabled' : ''}">
+      <button type="button" class="pcard-btn" data-pid="${esc(p.id)}" ${used.has(p.id) && cur !== p.id ? 'disabled' : ''} title="${esc(p.avatar_credit?.attribution_text || '')}">
+        <img src="${esc(assetUrl(p.avatar))}" alt="${esc(p.name)}"><b>${esc(p.name)}</b><span>${esc(p.blurb)}</span>
+      </button>
+      <details class="pcard-lic"><summary>来源与授权</summary>
+        <a class="src" href="${esc(p.source.url)}" target="_blank" rel="noopener">${esc(p.source.repo)} · ${esc(p.source.license)}</a>
+        ${avatarCreditLine(p.avatar_credit, true)}
+      </details>
+    </div>`).join('')}</div>`;
   el.classList.remove('hidden');
-  el.onclick = (e) => {
-    if (e.target.closest('[data-close]')) { el.classList.add('hidden'); return; }
-    const c = e.target.closest('[data-pid]'); if (!c || c.disabled) return;
-    Personas.pick[side][i] = c.dataset.pid || null; el.classList.add('hidden'); renderPickers();
-  };
 }
+$('ppick').addEventListener('click', (e) => {
+  if (!ppickTarget) return;
+  if (e.target.closest('.pp-close')) { $('ppick').classList.add('hidden'); return; }
+  const c = e.target.closest('.pcard-btn, .pcard.auto'); if (!c || c.disabled) return;
+  Personas.pick[ppickTarget.side][ppickTarget.i] = c.dataset.pid || null;
+  $('ppick').classList.add('hidden');
+  renderPickers();
+});
 $('pickers').addEventListener('click', (e) => {
   const s = e.target.closest('.pslot'); if (s) { openPicker(s.dataset.side, +s.dataset.i); return; }
-  const c = e.target.closest('[data-rt]');
-  if (c) {
+  const c = e.target.closest('.pcard-btn');
+  if (c && c.dataset.rt) {
     const id = c.dataset.rt, l = Personas.pick.roundtable;
     if (l.includes(id)) l.splice(l.indexOf(id), 1); else if (l.length < 6) l.push(id); else toast('最多选 6 位');
     renderPickers();
@@ -330,7 +566,7 @@ $('form').addEventListener('submit', async (e) => {
   try {
     const r = await API.submit(body);
     if ($('remember').checked) localStorage.setItem('arenaPass', body.passcode); else localStorage.removeItem('arenaPass');
-    $('modal').classList.add('hidden'); $('form').reset();
+    closeModal(); $('form').reset();
     Personas.pick = { aff: [null, null], neg: [null, null], roundtable: [] }; renderPickers();
     toast('已开场！分配官正在安排角色…');
     location.hash = '#/s/' + encodeURIComponent(r.sid);
@@ -338,22 +574,57 @@ $('form').addEventListener('submit', async (e) => {
     $('mErr').textContent = err.body?.error || err.message || '提交失败';
   } finally { $('submitBtn').disabled = false; }
 });
-addEventListener('keydown', (e) => { if (e.key === 'Escape') $('modal').classList.add('hidden'); });
+addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!$('ppick').classList.contains('hidden')) { $('ppick').classList.add('hidden'); return; }   // picker first, then the form
+  if (!$('modal').classList.contains('hidden')) { closeModal(); return; }
+  if ($('verdict').classList.contains('on')) { $('verdict').classList.remove('on'); return; }
+  $('drawer').classList.add('hidden');
+});
 
 // =====================================================================================
 // Session view
 // =====================================================================================
 let stage = null;
+function syncCamToggleUI(on) {
+  const btn = $('camToggle');
+  if (!btn) return;
+  btn.setAttribute('aria-pressed', String(!!on));
+  btn.title = on ? '已锁定内容区滚动，拖动/双指可操控镜头（点击退出）' : '默认上下滚动内容，点击开启镜头旋转与缩放';
+}
+function isScrollBlockedByOverlay() {
+  const isShown = (id) => { const el = $(id); return el && !el.classList.contains('hidden'); };
+  return isShown('drawer') || $('verdict')?.classList.contains('on') || isShown('modal') || isShown('ppick');
+}
+$('camReset')?.addEventListener('click', () => stage?.resetCamera());
+$('camToggle')?.addEventListener('click', () => {
+  const s = getStage();
+  syncCamToggleUI(s.setCameraControl?.(!s.getCameraControl?.()));
+});
 function getStage() {
   if (!stage) stage = createStage($('stageHost'), $('overlay'), {
     onPickBot: (id) => current?.showRole(id),
     onPickMsg: (idx) => current?.seek(idx + 1, true),
+    onCamControlChange: syncCamToggleUI,
+    onScroll: (dy) => {
+      if (!dy || isScrollBlockedByOverlay()) return;
+      const pane = $('pane');
+      if (pane && pane.scrollHeight > pane.clientHeight + 2) {
+        const maxTop = Math.max(0, pane.scrollHeight - pane.clientHeight);
+        pane.scrollTop = Math.max(0, Math.min(maxTop, pane.scrollTop + dy));
+        return;
+      }
+      const se = document.scrollingElement || document.documentElement;
+      if (se) se.scrollTop = Math.max(0, se.scrollTop + dy);
+    },
     reserved: () => {
       const host = $('stageWrap').getBoundingClientRect();
       const out = [];
-      for (const el of document.querySelectorAll('.hud-top > *, .replay, .votebar:not(.hidden), .drawer:not(.hidden)')) {
+      // HUD that floats over the canvas: bubbles must not cover it (elements outside the stage rect are ignored)
+      for (const el of document.querySelectorAll('#timerCard:not(.hidden), #camReset, #camToggle, .votebar:not(.hidden), .drawer:not(.hidden), #subtitle:not(.hidden), .hud-top > *')) {
         const r = el.getBoundingClientRect();
-        if (r.width && r.height) out.push({ x: r.left - host.left, y: r.top - host.top, w: r.width, h: r.height });
+        if (!r.width || !r.height || r.bottom <= host.top || r.top >= host.bottom || r.right <= host.left || r.left >= host.right) continue;
+        out.push({ x: r.left - host.left, y: r.top - host.top, w: r.width, h: r.height });
       }
       return out;
     },
@@ -388,18 +659,68 @@ function msgRuleTxt(m) {     // one finished utterance: spoken length vs. its ti
   return `${m.chars ?? 0} 字 ≈ ${fmtClock(spoken)}${cx ? '（质询共 ' + fmtClock(m.limit_s) + '）' : ' / ' + fmtClock(m.limit_s)}${m.truncated ? ' · 超时，已截断' : ''}${m.forfeited ? ' · 生成超时作废' : ''}`;
 }
 
+function setStageMask(state, msg, canRetry) {
+  const m = $('stageMask'), txt = $('stageMaskTxt'), retry = $('stageMaskRetry');
+  if (!m) return;
+  m.dataset.state = state || 'idle';
+  if (txt && msg != null) txt.textContent = msg;
+  if (retry) retry.classList.toggle('hidden', !canRetry);
+  m.classList.toggle('hidden', state === 'ready' || state === 'idle');
+}
+$('stageMaskRetry')?.addEventListener('click', () => current?.retry?.());
+$('roleStrip')?.addEventListener('click', (e) => { const b = e.target.closest('.rchip'); if (b?.dataset?.rid) current?.showRole?.(+b.dataset.rid); });
+$('verdictStrip')?.addEventListener('click', (e) => { if (e.target.closest('.vs-more')) current?.setTab?.('verdict'); });
+
+function resetSessionUI() {
+  $('verdict').classList.remove('on');
+  $('vbox').innerHTML = '';
+  $('confetti').innerHTML = '';
+  $('drawer').classList.add('hidden');
+  $('drawer').innerHTML = '';
+  $('votebar').classList.add('hidden');
+  $('votebar').innerHTML = '';
+  const rs = $('roleStrip');
+  if (rs) { rs.classList.add('hidden'); rs.innerHTML = ''; rs._rk = undefined; }
+  const vs = $('verdictStrip');
+  if (vs) { vs.classList.add('hidden'); vs.innerHTML = ''; vs._vk = undefined; }
+  const pb = $('phasebar');
+  pb.innerHTML = ''; pb._k = undefined; pb.classList.add('hidden');
+  $('timerCard').classList.add('hidden');
+  $('tPh').textContent = ''; $('tClk').textContent = '--:--'; $('tClk').className = 'clk'; $('tSub').textContent = '';
+  $('nMsgs').textContent = '0';
+  $('pos').textContent = '0/0';
+  $('scrub').max = '0'; $('scrub').value = '0';
+  $('tabFmt').classList.add('hidden');
+  $('tabVerdict').classList.add('hidden');
+  $('liveBtn').classList.remove('on'); $('liveBtn').textContent = '最新';
+  $('playBtn').textContent = '▶'; $('playBtn').setAttribute('aria-label', '从头回放');
+  $('tlNew')?.classList.add('hidden');
+  $('subtitle').classList.add('hidden'); $('subtitle').innerHTML = '';
+  $('pane').innerHTML = '';
+}
+
 function openSession(sid) {
+  const myEpoch = ++sessionEpoch;
+  const sessionAC = new AbortController();
   const S = { sid, topic: null, roles: [], byId: new Map(), msgs: [], status: {}, verdict: null, export: null, finalExists: false,
-    cursor: 0, follow: true, playing: false, tab: 'tl', closed: false, arrival: new Map(), verdictShownFor: -1, lastBundle: 0, openItems: new Set(), live: null, ws: null };
-  const ctl = { sid, close, showRole, seek };
-  let pollAbort = null, playTimer = 0, uiTimer = 0, snapTimer = 0, subAbort = null;
+    cursor: 0, follow: true, playing: false, tab: 'tl', closed: false, arrival: new Map(), verdictShownFor: -1, lastBundle: 0, openItems: new Set(), live: null, ws: null, netMode: Net.mode };
+  const ctl = { sid, close, showRole, seek, setTab, retry: () => { if (isCurrent()) load(); }, get netMode() { return S.netMode; } };
+  let pollAbort = null, playTimer = 0, uiTimer = 0, snapTimer = 0, retryTimer = 0, subAbort = null, finalSeq = 0;
+  let loadGen = 0, loadAC = null, transportStarted = false;
   let subDom = null, subFollow = true, subSpeakerKey = null, subLastBody = null, subLastMeta = '';
+  const timers = new Set();
+  const isCurrent = () => !S.closed && myEpoch === sessionEpoch && !sessionAC.signal.aborted;
+  const trackTimer = (fn, ms) => {
+    const id = setTimeout(() => { timers.delete(id); if (isCurrent()) fn(); }, ms);
+    timers.add(id);
+    return id;
+  };
+  const cancelTimer = (id) => { clearTimeout(id); timers.delete(id); };
+  resetSessionUI();
+  stage?.clear?.();
+  setStageMask('loading', '正在加载舞台…', false);
   $('pane').innerHTML = '<div class="tl-ann"><span>加载中…</span></div>';
   $('sTitle').textContent = '加载中…'; $('kicker').textContent = '';
-  $('verdict').classList.remove('on'); $('drawer').classList.add('hidden');
-  $('tPh').textContent = ''; $('tClk').textContent = '--:--'; $('tSub').textContent = '';
-  $('tClk').className = 'clk';
-  const pb = $('phasebar'); pb.innerHTML = ''; pb._k = undefined; pb.classList.add('hidden');
   stage?.update({ bubbles: [], votes: null, consensus: false, busy: false });
 
   const mode = () => S.topic?.mode || S.status.mode || (String(sid).startsWith('db-') ? 'debate' : 'roundtable');
@@ -453,11 +774,13 @@ function openSession(sid) {
     if (!before && !running() && S.msgs.length) { S.follow = false; toast('本场已结束：可拖动时间轴或点 ▶ 从头回放', 4200); }
     if (!before && running() && S.msgs.length > 2) {   // 补播最近几条，再接上直播
       S.cursor = Math.max(0, S.msgs.length - 3); S.follow = false; S.playing = true; S.catchup = true;
-      setTimeout(play, 900);
+      cancelTimer(playTimer);
+      playTimer = trackTimer(play, 900);
     }
     renderAll();
   }
   function applyIncoming(j) {
+    if (!isCurrent()) return;
     if (j.topic && (!S.topic || (j.topic.roles || []).length !== S.roles.length || S.topic.allocating)) applyTopic(j.topic);
     if (j.status) { S.status = j.status; normalizeRules(); if (!S.roles.length) setupStage(); }
     if (j.verdict) S.verdict = j.verdict;
@@ -477,29 +800,70 @@ function openSession(sid) {
     }
   }
 
+  function startTransport() {
+    if (!isCurrent() || transportStarted) return;
+    transportStarted = true;
+    if (Net.mode === 'live') pollLoop(); else snapLoop();
+  }
+
   async function load() {
+    if (!isCurrent()) return;
+    cancelTimer(retryTimer); retryTimer = 0;
+    loadAC?.abort();
+    const ac = new AbortController();
+    loadAC = ac;
+    const gen = ++loadGen;
+    const onSessAbort = () => ac.abort();
+    sessionAC.signal.addEventListener('abort', onSessAbort, { once: true });
+    const isLoadCurrent = () => isCurrent() && gen === loadGen && !ac.signal.aborted;
+
+    setStageMask('loading', '正在加载舞台…', false);
     try {
-      const b = await API.bundle(sid);
-      if (S.closed) return;
+      const b = await API.bundle(sid, { signal: ac.signal });
+      if (!isLoadCurrent()) return;
       applyBundle(b); S.lastBundle = Date.now();
-      if (Net.mode === 'live') pollLoop(); else snapLoop();
+      const stagePresentOk = typeof stage?.present === 'function' ? stage.present() : true;
+      const stageReadyOk = typeof stage?.isReady === 'function' ? stage.isReady() : true;
+      const allocatingNoRoles = !S.roles.length && (!!S.topic?.allocating || S.status?.state === 'allocating' || mode() === 'roundtable');
+      if (!allocatingNoRoles && (!stagePresentOk || !stageReadyOk)) {
+        const err = new Error(stage?.getError?.() || '舞台角色构建失败');
+        err.stageBuildFailed = true;
+        throw err;
+      }
+      setStageMask('ready');
+      startTransport();
     } catch (e) {
-      if (S.closed) return;
-      $('sTitle').textContent = e.status === 404 ? '找不到这个场次' : '加载失败，重试中…';
-      if (e.status !== 404) setTimeout(load, 3000);
+      if (!isLoadCurrent()) return;
+      if (IS_DEBUG) console.error('session load failed', e);
+      if (e.status === 404) {
+        $('sTitle').textContent = '找不到这个场次';
+        setStageMask('error', '找不到这个场次', false);
+      } else if (e.stageBuildFailed) {
+        $('sTitle').textContent = '舞台加载失败，请重试';
+        setStageMask('error', '舞台角色构建失败，请重试', true);
+      } else {
+        $('sTitle').textContent = '加载失败，重试中…';
+        setStageMask('error', '加载失败，请重试', true);
+        retryTimer = trackTimer(load, 3000);
+      }
+    } finally {
+      sessionAC.signal.removeEventListener('abort', onSessAbort);
+      if (loadAC === ac) loadAC = null;
     }
   }
   function wsLoop() {
     return new Promise((resolve) => {
-      if (!('WebSocket' in window) || (Net.wsFails || 0) >= 2) return resolve(false);
+      if (!isCurrent() || !('WebSocket' in window) || (Net.wsFails || 0) >= 2) return resolve(false);
       const url = Net.base.replace(/^http/, 'ws') + `/api/s/${encodeURIComponent(sid)}/ws?since=${S.msgs.length}`;
       let opened = false, ws;
       try { ws = new WebSocket(url); } catch { Net.wsFails = (Net.wsFails || 0) + 1; return resolve(false); }
       S.ws = ws;
-      const t = setTimeout(() => { if (!opened) { Net.wsFails = (Net.wsFails || 0) + 1; try { ws.close(); } catch {} resolve(false); } }, 6000);
-      ws.onopen = () => { opened = true; clearTimeout(t); Net.transport = 'WebSocket'; Net.wsFails = 0; setConn('live', '实时·WS', '实时通道（WebSocket）：' + Net.base); };
+      const closeWs = () => { try { ws.close(); } catch {} };
+      sessionAC.signal.addEventListener('abort', closeWs, { once: true });
+      const t = trackTimer(() => { if (!opened) { Net.wsFails = (Net.wsFails || 0) + 1; closeWs(); resolve(false); } }, 6000);
+      ws.onopen = () => { if (!isCurrent()) { closeWs(); return; } opened = true; cancelTimer(t); Net.transport = 'WebSocket'; Net.wsFails = 0; setConn('live', '实时·WS', '实时通道（WebSocket）：' + Net.base); };
       ws.onmessage = (e) => {
-        if (S.closed) { try { ws.close(); } catch {} return; }
+        if (!isCurrent()) { closeWs(); return; }
         let ev; try { ev = JSON.parse(e.data); } catch { return; }
         const d = ev.data;
         if (ev.type === 'msg') applyIncoming({ messages: [d] });
@@ -511,40 +875,43 @@ function openSession(sid) {
         else if (ev.type === 'final') S.finalExists = !!d.exists;
       };
       ws.onclose = () => {
-        clearTimeout(t);
-        if (S.closed) return resolve(true);
+        cancelTimer(t);
+        if (!isCurrent()) return resolve(true);
         if (!opened) return resolve(false);
-        setTimeout(() => { if (!S.closed) pollLoop(); }, 1000);
+        trackTimer(() => { if (isCurrent()) pollLoop(); }, 1000);
         resolve(true);
       };
       ws.onerror = () => {};
     });
   }
   async function pollLoop() {
+    if (!isCurrent()) return;
     if (Net.mode === 'live' && await wsLoop()) return;
     Net.transport = '长轮询';
-    while (!S.closed && Net.mode === 'live') {
+    while (isCurrent() && Net.mode === 'live') {
       pollAbort = new AbortController();
+      const abortPoll = () => pollAbort?.abort();
+      sessionAC.signal.addEventListener('abort', abortPoll, { once: true });
       try {
         const j = await fetchJSON(`${Net.base}/api/s/${encodeURIComponent(sid)}/poll?since=${S.msgs.length}&sv=${S.status.updated_ms || 0}&lv=${S.live?.seq ?? ''}`,
           { timeout: 28000, signal: pollAbort.signal });
         Net.fails = 0;
-        if (S.closed) return;
+        if (!isCurrent()) return;
         applyIncoming(j);
         if (!running() && !j.messages?.length) await sleep(4000);
       } catch (e) {
-        if (S.closed) return;
+        if (!isCurrent()) return;
         noteFailure(); await sleep(1500);
       }
     }
-    if (!S.closed) snapLoop();
+    if (isCurrent()) snapLoop();
   }
   async function snapLoop() {
-    clearTimeout(snapTimer);
-    if (S.closed) return;
+    cancelTimer(snapTimer);
+    if (!isCurrent()) return;
     if (Net.mode === 'live') { pollLoop(); return; }
-    try { const b = await API.bundle(sid); if (!S.closed) applyBundle(b); } catch {}
-    snapTimer = setTimeout(snapLoop, 30000);
+    try { const b = await API.bundle(sid, { signal: sessionAC.signal }); if (isCurrent()) applyBundle(b); } catch {}
+    if (isCurrent()) snapTimer = trackTimer(snapLoop, 30000);
   }
 
   // ---------------- live subtitle (partial_text typed as it streams)
@@ -703,10 +1070,11 @@ function openSession(sid) {
     const atTail = S.cursor >= S.msgs.length;
     const liveNow = atTail && running();
     const f = { bubbles: [], votes: null, consensus: false, busy: false };
-    // bubbles: latest message per bot (max 4), newest is "main"
+    // bubbles: latest message per bot (exclude verdict/announce; max 1 mobile / 2 desktop)
     const seen = new Set();
-    for (let i = shown.length - 1; i >= 0 && f.bubbles.length < (IS_MOBILE ? 3 : 4); i--) {
+    for (let i = shown.length - 1; i >= 0 && f.bubbles.length < (IS_MOBILE ? 1 : 2); i--) {
       const x = shown[i];
+      if (x.type === 'verdict' || x.type === 'announce') continue;
       if (seen.has(x.role_id)) continue;
       if (S.arrival.has(i) && liveNow && performance.now() - S.arrival.get(i) > 90000) continue;
       seen.add(x.role_id);
@@ -810,48 +1178,76 @@ function openSession(sid) {
     $('liveBtn').classList.toggle('on', S.follow);
     $('liveBtn').textContent = running() ? '直播' : '最新';
     $('playBtn').textContent = S.playing ? '❚❚' : '▶';
+    $('playBtn').setAttribute('aria-label', S.playing ? '暂停回放' : '从头回放');
     $('nMsgs').textContent = String(n);
   }
-  let tlCount = -1, tlSid = null;
+  // timeline: built once, then *appended* — status / "thinking" lines live in their own nodes, so a status tick (calls,
+  // speaking, state) no longer rebuilds the whole list (that used to reset scroll and collapse open 思考过程).
+  let tlCount = -1, tlSid = null, tlLen = 0;
+  function tlItemHtml(m, i) {
+    const deb = mode() === 'debate';
+    if (m.type === 'announce') return `<div class="tl-ann" data-i="${i}"><span>${esc(m.text)}</span></div>`;
+    const [lab, col] = typeMeta(m.type, mode());
+    const r = S.byId.get(m.role_id);
+    const to = m.reply_to && S.byId.get(Number(m.reply_to)) ? ` → ${esc(roleName(Number(m.reply_to)))}` : '';
+    const ph = deb && m.phase ? `<span class="tp" style="--tc:#5a6380">${esc(m.phase)}</span>` : (m.round ? `<span style="color:var(--muted)">第${m.round}轮</span>` : '');
+    const vote = m.type === 'vote' ? `<b style="color:${m.vote === 'disagree' ? 'var(--neg)' : 'var(--good)'}">${m.vote === 'disagree' ? '✗ 反对' : '✓ 赞成'}</b>` : '';
+    const lim = (m.limit_chars || m.budget_chars) ? `<div class="lim ${m.truncated || m.overtime ? 'bad' : ''}">${msgRuleTxt(m)}</div>` : '';
+    const short = m.type === 'vote' ? (m.position || m.short) : m.type === 'proposal' ? '表决：' + (m.conclusion || m.short) : m.short;
+    const av = (r?.persona_id && Personas.byId.get(r.persona_id)?.avatar) || r?.avatar;
+    return `<div class="tl-item${S.openItems.has(i) ? ' open' : ''}" data-i="${i}" style="--c:${colorOf(m.role_id)}">
+          <div class="av">${av ? `<img class="avimg" src="${esc(assetUrl(av))}" alt="">` : esc((r?.name || m.role || '?').replace(/^(正方|反方)/, '').replace(/^[一二]辩·?/, '').slice(0, 1))}</div>
+          <div><div class="hd"><b>${esc(r?.name || m.role || '')}</b><span class="tp" style="--tc:${col}">${esc(lab)}</span>${ph}${vote}<span style="color:var(--muted)">${to}</span><span class="t">${esc((m.ts || '').slice(11, 19))}</span></div>
+          <div class="sm">${esc(short || plain(m.text, 60))}</div>${lim}
+          ${(m.assess || m.self_review) ? `<details class="think-proc"><summary>思考过程</summary>${m.assess ? `<div class="tp-h">评估别人的论据</div><div class="md">${md(m.assess)}</div>` : ''}${m.self_review ? `<div class="tp-h">对照自己上一轮</div><div class="md">${md(m.self_review)}</div>` : ''}</details>` : ''}
+          <div class="tx md">${md(m.text)}</div></div></div>`;
+  }
+  const paneAtBottom = (pane) => pane.scrollHeight - pane.scrollTop - pane.clientHeight < 80;
+  function showTlNew(on) { const b = $('tlNew'); if (b) b.classList.toggle('hidden', !on); }
   function renderTimeline() {
     const pane = $('pane');
     if (S.tab !== 'tl') return;
     const st = S.status;
-    const deb = mode() === 'debate';
-    const tlKey = [Personas.version, S.msgs.length, st.speaking, st.paused, st.state, st.calls, S.topic?.allocator?.rationale].join('|');
-    if (tlCount !== tlKey || tlSid !== sid || !pane.querySelector('.tl-list')) {
-      const atBottom = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 80;
-      tlCount = tlKey; tlSid = sid;
-      const items = S.msgs.map((m, i) => {
-        if (m.type === 'announce') return `<div class="tl-ann" data-i="${i}"><span>${esc(m.text)}</span></div>`;
-        const [lab, col] = typeMeta(m.type, mode());
-        const r = S.byId.get(m.role_id);
-        const to = m.reply_to && S.byId.get(Number(m.reply_to)) ? ` → ${esc(roleName(Number(m.reply_to)))}` : '';
-        const ph = deb && m.phase ? `<span class="tp" style="--tc:#5a6380">${esc(m.phase)}</span>` : (m.round ? `<span style="color:var(--muted)">第${m.round}轮</span>` : '');
-        const vote = m.type === 'vote' ? `<b style="color:${m.vote === 'disagree' ? 'var(--neg)' : 'var(--good)'}">${m.vote === 'disagree' ? '✗ 反对' : '✓ 赞成'}</b>` : '';
-        const lim = (m.limit_chars || m.budget_chars) ? `<div class="lim ${m.truncated || m.overtime ? 'bad' : ''}">${msgRuleTxt(m)}</div>` : '';
-        const short = m.type === 'vote' ? (m.position || m.short) : m.type === 'proposal' ? '表决：' + (m.conclusion || m.short) : m.short;
-        const av = (r?.persona_id && Personas.byId.get(r.persona_id)?.avatar) || r?.avatar;
-        return `<div class="tl-item${S.openItems.has(i) ? ' open' : ''}" data-i="${i}" style="--c:${colorOf(m.role_id)}">
-          <div class="av">${av ? `<img class="avimg" src="${esc(assetUrl(av))}" alt="">` : esc((r?.name || m.role || '?').replace(/^(正方|反方)/, '').replace(/^[一二]辩·?/, '').slice(0, 1))}</div>
-          <div><div class="hd"><b>${esc(r?.name || m.role || '')}</b><span class="tp" style="--tc:${col}">${esc(lab)}</span>${ph}${vote}<span style="color:var(--muted)">${to}</span><span class="t">${esc((m.ts || '').slice(11, 19))}</span></div>
-          <div class="sm">${esc(short || plain(m.text, 60))}</div>${lim}
-          ${(m.assess || m.self_review) ? `<details class="think-proc"><summary>💭 思考过程</summary>${m.assess ? `<div class="tp-h">评估别人的论据</div><div class="md">${md(m.assess)}</div>` : ''}${m.self_review ? `<div class="tp-h">对照自己上一轮</div><div class="md">${md(m.self_review)}</div>` : ''}</details>` : ''}
-          <div class="tx md">${md(m.text)}</div></div></div>`;
-      }).join('');
-      const paused = st.paused ? `<div class="tl-ann"><span style="background:#fff1d6;color:#7a5200">⏸ ${esc(st.paused)}</span></div>` : '';
-      const thinking = running() && st.speaking ? `<div class="tl-ann"><span>💭 ${esc(st.speaking)} 正在${st.state === 'allocating' ? '分配角色' : st.state === 'judging' ? '评议' : '组织发言'}…</span></div>` : '';
-      const head = `<div class="statusline"><span>状态 <b>${esc(STATE_LABEL[st.state] || st.state || '—')}</b></span><span>调用 <b>${st.calls ?? 0}</b></span><span>429 <b>${st.r429 ?? 0}</b></span>${S.topic?.allocator?.rationale ? `<span title="分配官的理由">🧭 ${esc(S.topic.allocator.rationale)}</span>` : ''}</div>`;
-      pane.innerHTML = head + `<div class="tl-list">${items || '<div class="tl-ann"><span>还没有发言</span></div>'}</div>` + paused + thinking;
-      if (S.follow && atBottom !== false) pane.scrollTop = pane.scrollHeight;
+    const atBottom = paneAtBottom(pane);
+    const listKey = [Personas.version, S.roles.length, stage ? 1 : 0].join('|');
+    let list = pane.querySelector('.tl-list');
+    let grew = false;
+    if (tlCount !== listKey || tlSid !== sid || !list || S.msgs.length < tlLen) {
+      tlCount = listKey; tlSid = sid;
+      pane.innerHTML = `<div class="tl-status"></div><div class="tl-list"></div><div class="tl-tail"></div>`;
+      list = pane.querySelector('.tl-list');
+      list.innerHTML = S.msgs.length ? S.msgs.map(tlItemHtml).join('') : '<div class="tl-ann tl-empty"><span>还没有发言</span></div>';
+      tlLen = S.msgs.length;
+      if (S.follow) pane.scrollTop = pane.scrollHeight;
+    } else if (S.msgs.length > tlLen) {
+      list.querySelector('.tl-empty')?.remove();
+      list.insertAdjacentHTML('beforeend', S.msgs.slice(tlLen).map((m, k) => tlItemHtml(m, tlLen + k)).join(''));
+      tlLen = S.msgs.length; grew = true;
+    }
+    // status line + paused/thinking tail: own nodes, diff-guarded
+    setHTML(pane.querySelector('.tl-status'), `<div class="statusline"><span>状态 <b>${esc(STATE_LABEL[st.state] || st.state || '—')}</b></span><span>调用 <b>${st.calls ?? 0}</b></span><span>429 <b>${st.r429 ?? 0}</b></span>${S.topic?.allocator?.rationale ? `<span title="分配官的理由">分配官：${esc(S.topic.allocator.rationale)}</span>` : ''}</div>`);
+    const paused = st.paused ? `<div class="tl-ann"><span style="background:#fff1d6;color:#7a5200">⏸ ${esc(st.paused)}</span></div>` : '';
+    const thinking = running() && st.speaking ? `<div class="tl-ann"><span>💭 ${esc(st.speaking)} 正在${st.state === 'allocating' ? '分配角色' : st.state === 'judging' ? '评议' : '组织发言'}…</span></div>` : '';
+    setHTML(pane.querySelector('.tl-tail'), paused + thinking);
+    if (grew) {
+      if (S.follow && atBottom) pane.scrollTop = pane.scrollHeight;
+      else if (!atBottom) showTlNew(true);
     }
     for (const el of pane.querySelectorAll('[data-i]')) {
       const i = +el.dataset.i;
       el.classList.toggle('cur', i === S.cursor - 1);
       el.classList.toggle('future', i >= S.cursor);
     }
-    if (!S.follow) { const cur = pane.querySelector('.tl-item.cur, .tl-ann.cur'); if (cur && S.playing) cur.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+    if (!S.follow && S.playing) {   // keep the replayed item in view without scrollIntoView (that also scrolls ancestors on mobile)
+      const cur = pane.querySelector('.tl-item.cur, .tl-ann.cur');
+      if (cur) {
+        const pr = pane.getBoundingClientRect(), cr = cur.getBoundingClientRect();
+        if (cr.top < pr.top || cr.bottom > pr.bottom) pane.scrollTo({ top: pane.scrollTop + (cr.top - pr.top) - pane.clientHeight / 3, behavior: 'smooth' });
+      }
+    }
   }
+  $('pane').onscroll = () => { if (S.tab === 'tl' && paneAtBottom($('pane'))) showTlNew(false); };
+  if ($('tlNew')) $('tlNew').onclick = () => { const pane = $('pane'); pane.scrollTop = pane.scrollHeight; showTlNew(false); };
   function srcLinks(list) {
     return (list || []).map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.repo)}</a>${x.stars ? `<span class="star">★ ${Number(x.stars).toLocaleString()}</span>` : ''}`).join(' · ');
   }
@@ -882,7 +1278,7 @@ function openSession(sid) {
   function renderRoles() {
     if (!S.roles.length) { $('pane').innerHTML = '<div class="tl-ann"><span>分配官正在安排角色…</span></div>'; return; }
     const t = S.topic;
-    $('pane').innerHTML = (t.allocator ? `<div class="statusline">🧭 分配官：${esc(t.allocator.rationale || '—')}${t.allocator.fallback ? '（模型输出不可解析，已用默认阵容）' : ''}</div>` : '') +
+    $('pane').innerHTML = (t.allocator ? `<div class="statusline">分配官：${esc(t.allocator.rationale || '—')}${t.allocator.fallback ? '（模型输出不可解析，已用默认阵容）' : ''}</div>` : '') +
       S.roles.map((r) => roleCard(r, false)).join('') +
       (t.legacy ? '<div class="tl-ann"><span>旧场次（升级前创建），角色未配置 skill</span></div>' : '');
   }
@@ -906,17 +1302,17 @@ function openSession(sid) {
     return `<div class="scores"><span></span><b style="color:var(--aff)">正方 ${v.scores.aff.total}</b><b style="color:var(--neg)">反方 ${v.scores.neg.total}</b>` +
       rows.map(([k, l]) => `<span>${l}</span><div class="bar aff"><i data-w="${v.scores.aff[k] * 10}"></i></div><div class="bar neg"><i data-w="${v.scores.neg[k] * 10}"></i></div>`).join('') + '</div>';
   }
-  function growBars(root) { requestAnimationFrame(() => setTimeout(() => root.querySelectorAll('.bar i').forEach((i) => { i.style.width = i.dataset.w + '%'; }), 60)); }
+  function growBars(root) { requestAnimationFrame(() => { if (!isCurrent()) return; trackTimer(() => { if (isCurrent()) root.querySelectorAll('.bar i').forEach((i) => { i.style.width = i.dataset.w + '%'; }); }, 60); }); }
   function exportBoxHtml() {
     if (mode() !== 'debate' || S.topic?.legacy || sid === 'pnp-20261112') return '';
     if (!S.verdict && !S.export) return '';
     const ex = S.export;
     if (Net.mode !== 'live' || !Net.base) {
-      return '<div class="export-box"><div class="ex-title">📄 赛后报告导出</div><div class="ex-note">快照模式无法直接下载动态报告，请连接实时服务端后下载 HTML / PDF。</div></div>';
+      return '<div class="export-box"><div class="ex-title">赛后报告导出</div><div class="ex-note">快照模式无法直接下载动态报告，请连接实时服务端后下载 HTML / PDF。</div></div>';
     }
     if (ex?.ready) {
       const base = Net.base.replace(/\/$/, '') + '/api/s/' + encodeURIComponent(sid);
-      return `<div class="export-box ready"><div class="ex-title">📄 赛后裁判报告（已就绪）</div><div class="ex-actions"><a class="btn small" href="${esc(base + '/export.html')}" download>⬇ 下载 HTML 报告</a><a class="btn small ghost" href="${esc(base + '/export.pdf')}" download>⬇ 下载 PDF 报告</a></div></div>`;
+      return `<div class="export-box ready"><div class="ex-title">赛后裁判报告已就绪</div><div class="ex-actions"><a class="btn small" href="${esc(base + '/export.pdf')}" download>下载 PDF 报告</a><a class="btn small ghost" href="${esc(base + '/export.html')}" download>下载 HTML 报告</a></div></div>`;
     }
     const st = ex?.state || 'pending';
     let msg = '赛后报告正在生成中…';
@@ -924,13 +1320,13 @@ function openSession(sid) {
     else if (st === 'missing_data' || st === 'failed') msg = `赛后报告暂不可用：${esc(ex?.error || '数据校验未通过')}`;
     else if (st === 'stale') msg = '裁决已更新，正在重建最新 HTML / PDF 报告…';
     else if (st === 'not_applicable') return '';
-    return `<div class="export-box"><div class="ex-title">📄 赛后报告导出</div><div class="ex-note">${msg}</div></div>`;
+    return `<div class="export-box"><div class="ex-title">赛后报告导出</div><div class="ex-note">${msg}</div></div>`;
   }
   function renderVerdictPane() {
     const v = S.verdict;
     if (!v) { $('pane').innerHTML = `<div class="tl-ann"><span>${S.status.state === 'judging' ? (S.status.judge_status === 'fallback_claude' ? '⚖️ 兜底裁判（Claude Code CLI）评议中…' : '⚖️ 已发出 judge_request，等待 Gemini 传令官…') : '比赛结束后由裁判宣判'}</span></div>`; return; }
     const w = v.winner === 'aff' ? '正方' : '反方';
-    $('pane').innerHTML = `<div class="vcard"><div style="font-size:12px;letter-spacing:.2em;opacity:.7">VERDICT · 判决</div><div class="w ${v.winner}">🏆 ${w}胜</div>${scoresHtml(v)}</div>
+    $('pane').innerHTML = `<div class="vcard ${v.winner}"><div class="vk">裁判判决</div><div class="w ${v.winner}">${w}胜</div>${scoresHtml(v)}</div>
       ${exportBoxHtml()}
       <h3 style="font-size:15px;margin:6px 0">判决理由（RFD）</h3><div class="rfd">${esc(v.rfd)}</div>
       ${v.key_clashes?.length ? `<h3 style="font-size:15px;margin:12px 0 6px">关键交锋</h3><ol class="pts">${v.key_clashes.map((c) => `<li>${esc(c)}</li>`).join('')}</ol>` : ''}
@@ -939,13 +1335,17 @@ function openSession(sid) {
     growBars($('pane'));
   }
   async function renderFinal() {
+    const seq = ++finalSeq;
     $('pane').innerHTML = '<div class="tl-ann"><span>读取终稿…</span></div>';
     try {
-      const f = S.finalText != null && Net.mode !== 'live' ? { exists: !!S.finalText, text: S.finalText } : await API.final(sid);
-      if (S.tab !== 'final' || S.closed) return;
+      const f = S.finalText != null && Net.mode !== 'live' ? { exists: !!S.finalText, text: S.finalText } : await API.final(sid, { signal: sessionAC.signal });
+      if (!isCurrent() || S.tab !== 'final' || seq !== finalSeq) return;
       const exHtml = exportBoxHtml();
       $('pane').innerHTML = f.exists ? `${exHtml}<div class="md" style="font-size:14px;line-height:1.7">${md(f.text)}</div>` : `${exHtml}<div class="tl-ann"><span>终稿尚未生成${running() ? '（结束时自动生成）' : ''}</span></div>`;
-    } catch { $('pane').innerHTML = `${exportBoxHtml()}<div class="tl-ann"><span>终稿尚未生成</span></div>`; }
+    } catch {
+      if (!isCurrent() || S.tab !== 'final' || seq !== finalSeq) return;
+      $('pane').innerHTML = `${exportBoxHtml()}<div class="tl-ann"><span>终稿尚未生成</span></div>`;
+    }
   }
   function renderPane() {
     if (S.tab === 'tl') renderTimeline();
@@ -957,7 +1357,7 @@ function openSession(sid) {
     const vb = $('votebar');
     if (f.voteInfo && mode() !== 'debate') {
       vb.classList.remove('hidden');
-      vb.innerHTML = `<span>🗳️ 表决</span><span class="c" title="${esc(f.voteInfo.conclusion)}">${esc(f.voteInfo.conclusion)}</span><b class="a">✓ ${f.voteInfo.a}</b><b class="d">✗ ${f.voteInfo.d}</b><span style="color:var(--muted)">/ ${f.voteInfo.n}</span>`;
+      vb.innerHTML = `<span>表决</span><span class="c" title="${esc(f.voteInfo.conclusion)}">${esc(f.voteInfo.conclusion)}</span><b class="a">✓ ${f.voteInfo.a}</b><b class="d">✗ ${f.voteInfo.d}</b><span style="color:var(--muted)">/ ${f.voteInfo.n}</span>`;
     } else vb.classList.add('hidden');
   }
   function renderPhaseBar(f) {
@@ -977,16 +1377,18 @@ function openSession(sid) {
   function showVerdictOverlay() {
     const v = S.verdict; if (!v) return;
     const w = v.winner === 'aff' ? '正方' : '反方';
-    $('vbox').innerHTML = `<div class="gavel">🔨</div><div class="k">裁 判 宣 判</div>
+    $('vbox').innerHTML = `<div class="k">裁判宣判</div>
       <div class="win ${v.winner}">${w}胜！</div><div class="score">${v.scores.aff.total} : ${v.scores.neg.total}</div>
       ${scoresHtml(v)}<div class="rfd">${esc(v.rfd)}</div>
       <div class="by">${(v.judge || {}).fallback ? '<b class="fb">兜底裁判</b> ' : '<b>Gemini 裁判</b> '}${esc((v.judge || {}).backend || v.backend || '')}（${esc((v.judge || {}).model || v.model || '')}）${v.mock_debate ? ' · 本场为 mock 演练' : ''}${v.second_opinion ? ' · 第二意见：兜底判' + (v.second_opinion.winner === 'aff' ? '正方' : '反方') + '胜 ' + v.second_opinion.aff_total + ':' + v.second_opinion.neg_total : ''}${v.primary === false ? ' · 等待 Gemini 主裁判' : ''}</div>
+      ${exportBoxHtml()}
       <div class="mact" style="justify-content:center"><button class="btn small" id="vClose">关闭</button><button class="btn small ghost" id="vMore">查看判决详情</button></div>`;
     $('verdict').classList.add('on');
     growBars($('vbox'));
     const cf = $('confetti'); cf.innerHTML = '';
     const cols = v.winner === 'aff' ? ['#3d7fe0', '#8fb8ff', '#c9a13b', '#fff'] : ['#e0483d', '#ff9a90', '#c9a13b', '#fff'];
-    for (let i = 0; i < (IS_MOBILE ? 40 : 90); i++) {
+    const nConf = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : IS_MOBILE ? 24 : 60;
+    for (let i = 0; i < nConf; i++) {
       const p = document.createElement('i');
       p.style.left = Math.random() * 100 + '%'; p.style.background = cols[i % cols.length];
       p.style.animationDuration = 2.4 + Math.random() * 2.4 + 's'; p.style.animationDelay = 1.1 + Math.random() * 1.2 + 's';
@@ -995,22 +1397,55 @@ function openSession(sid) {
     $('vClose').onclick = () => $('verdict').classList.remove('on');
     $('vMore').onclick = () => { $('verdict').classList.remove('on'); setTab('verdict'); };
   }
+  function renderRoleStrip(f) {
+    const el = $('roleStrip'); if (!el) return;
+    if (!S.roles.length) { el.classList.add('hidden'); return; }
+    const rk = sid + '|' + S.roles.map((r) => `${r.id}:${r.name}:${r.persona_id || ''}:${colorOf(r.id)}`).join('|');
+    if (el._rk !== rk) {
+      el._rk = rk;
+      el.innerHTML = S.roles.map((r) => {
+        const pInfo = r.persona_id ? Personas.byId.get(r.persona_id) : null;
+        const av = pInfo?.avatar || r.avatar;
+        return `<button type="button" class="rchip" data-rid="${r.id}" style="--c:${esc(colorOf(r.id))}" title="${esc(r.name)}">${av ? `<img class="rchip-av" src="${esc(assetUrl(av))}" alt="${esc(r.name)}" width="18" height="18" decoding="async">` : '<span class="rchip-dot" aria-hidden="true"></span>'}<span class="rchip-n">${esc(r.name)}</span></button>`;
+      }).join('');
+    }
+    el.classList.remove('hidden');
+    for (const c of el.querySelectorAll('.rchip')) {
+      const rid = +c.dataset.rid;
+      c.classList.toggle('active', f?.speakerId === rid || f?.thinkingId === rid);
+    }
+  }
+  function renderVerdictStrip() {
+    const el = $('verdictStrip'); if (!el) return;
+    const v = S.verdict;
+    const vIdx = S.msgs.findIndex((x) => x.type === 'verdict');
+    const showV = !!v && (vIdx < 0 || S.cursor > vIdx);
+    if (!showV) { el.classList.add('hidden'); return; }
+    const vk = sid + '|' + v.winner + '|' + (v.scores?.aff?.total ?? '') + '|' + (v.scores?.neg?.total ?? '') + '|' + (v.rfd || '');
+    if (el._vk !== vk) {
+      el._vk = vk;
+      const w = v.winner === 'aff' ? '正方胜' : '反方胜';
+      el.innerHTML = `<div class="vs-row"><details class="verdict-fold"><summary><span class="vs-badge ${esc(v.winner)}">${w}</span><span class="vs-score">${esc(v.scores?.aff?.total ?? '—')} : ${esc(v.scores?.neg?.total ?? '—')}</span><span class="vs-hint">裁判摘要</span></summary><div class="vs-rfd">${esc(v.rfd || '')}</div></details><button type="button" class="btn ghost small vs-more" data-vtab>完整判决</button></div>`;
+    }
+    el.classList.remove('hidden');
+  }
   function renderAll() {
-    if (S.closed) return;
+    if (!isCurrent()) return;
     renderHeader(); renderControls(); renderPane();
     const f = computeFrame();
     stage?.update(f);
-    renderVoteBar(f); renderTimerCard(f); renderLive();
+    renderVoteBar(f); renderTimerCard(f); renderLive(); renderRoleStrip(f); renderVerdictStrip();
     if (f.showVerdict && S.verdictShownFor !== sid + S.cursor && S.cursor === S.msgs.findIndex((x) => x.type === 'verdict') + 1) {
       S.verdictShownFor = sid + S.cursor; showVerdictOverlay();
     }
-    if (!f.showVerdict) $('verdict').classList.remove('on');
+    if (!f.showVerdict) { $('verdict').classList.remove('on'); S.verdictShownFor = -1; }   // scrubbed before the verdict: re-arm so returning to it shows the overlay again
   }
   // timer + live frame refresh (cheap)
-  uiTimer = setInterval(() => { if (S.closed) { clearInterval(uiTimer); return; } const f = computeFrame(); stage?.update(f); renderTimerCard(f); renderLive(); renderPhaseBar(f); }, 400);
+  uiTimer = setInterval(() => { if (!isCurrent()) { clearInterval(uiTimer); return; } const f = computeFrame(); stage?.update(f); renderTimerCard(f); renderLive(); renderPhaseBar(f); renderRoleStrip(f); }, 400);
 
   // ---------------- replay controls
   function seek(n, fromUser) {
+    if (!isCurrent()) return;
     S.cursor = Math.max(0, Math.min(S.msgs.length, n));
     if (fromUser) { S.follow = false; }
     if (S.cursor >= S.msgs.length && running() && !S.playing) S.follow = true;
@@ -1024,51 +1459,74 @@ function openSession(sid) {
     return Math.min(4200, 1700 + plain(m.short || m.text, 300).length * 12);
   }
   function play() {
-    clearTimeout(playTimer);
-    if (!S.playing) return;
+    cancelTimer(playTimer);
+    if (!isCurrent() || !S.playing) return;
     if (S.cursor >= S.msgs.length) { S.playing = false; S.follow = running() || S.catchup; S.catchup = false; renderAll(); return; }
     seek(S.cursor + 1);
-    playTimer = setTimeout(play, stepDelay());
+    if (isCurrent() && S.playing) playTimer = trackTimer(play, stepDelay());
   }
-  $('scrub').oninput = () => { S.playing = false; clearTimeout(playTimer); seek(+$('scrub').value, true); };
+  $('scrub').oninput = () => { if (!isCurrent()) return; S.playing = false; cancelTimer(playTimer); seek(+$('scrub').value, true); };
   $('playBtn').onclick = () => {
-    if (S.playing) { S.playing = false; clearTimeout(playTimer); renderAll(); return; }
+    if (!isCurrent()) return;
+    if (S.playing) { S.playing = false; cancelTimer(playTimer); renderAll(); return; }
     if (S.cursor >= S.msgs.length) S.cursor = 0;
-    S.follow = false; S.playing = true; $('verdict').classList.remove('on'); renderAll(); playTimer = setTimeout(play, 600);
+    S.follow = false; S.playing = true; $('verdict').classList.remove('on'); renderAll(); playTimer = trackTimer(play, 600);
   };
-  $('liveBtn').onclick = () => { S.playing = false; clearTimeout(playTimer); S.follow = true; seek(S.msgs.length); };
+  $('liveBtn').onclick = () => { if (!isCurrent()) return; S.playing = false; cancelTimer(playTimer); S.follow = true; seek(S.msgs.length); };
 
   // ---------------- tabs, timeline clicks, role drawer
   function setTab(t) {
+    if (!isCurrent()) return;
     S.tab = t; tlCount = -1;
-    for (const b of $('tabs').querySelectorAll('.tab')) b.classList.toggle('on', b.dataset.t === t);
-    $('pane').scrollTop = 0;
+    for (const b of $('tabs').querySelectorAll('.tab')) { b.classList.toggle('on', b.dataset.t === t); b.setAttribute('aria-selected', String(b.dataset.t === t)); }
+    $('pane').scrollTop = 0; showTlNew(false);
     if (t === 'final') renderFinal(); else renderPane();
   }
-  $('tabs').onclick = (e) => { const b = e.target.closest('.tab'); if (b) setTab(b.dataset.t); };
+  $('tabs').onclick = (e) => { if (!isCurrent()) return; const b = e.target.closest('.tab'); if (b) setTab(b.dataset.t); };
   $('pane').onclick = (e) => {
+    if (!isCurrent()) return;
     const it = e.target.closest('.tl-item[data-i]');
     if (it && !e.target.closest('a') && !e.target.closest('details')) {
       const i = +it.dataset.i;
       if (S.openItems.has(i)) S.openItems.delete(i); else S.openItems.add(i);
       it.classList.toggle('open');
-      S.playing = false; clearTimeout(playTimer); seek(i + 1, true);
+      S.playing = false; cancelTimer(playTimer); seek(i + 1, true);
     }
   };
   function showRole(id) {
+    if (!isCurrent()) return;
     const r = S.byId.get(id); if (!r) return;
     const d = $('drawer');
-    d.innerHTML = `<div style="display:flex;justify-content:flex-end"><button class="iconbtn" style="width:30px;height:30px;font-size:14px" id="dClose">✕</button></div>` + roleCard(r, true);
+    d.innerHTML = `<div class="drawer-head"><span class="grab" aria-hidden="true"></span><button class="iconbtn" id="dClose" aria-label="关闭角色详情">✕</button></div>` + roleCard(r, true);
     d.classList.remove('hidden');
     $('dClose').onclick = () => d.classList.add('hidden');
-    d.onclick = (e) => { const s = e.target.closest('[data-seek]'); if (s) { S.playing = false; seek(+s.dataset.seek + 1, true); } };
+    d.onclick = (e) => { const s = e.target.closest('[data-seek]'); if (s && isCurrent()) { S.playing = false; seek(+s.dataset.seek + 1, true); } };
   }
 
   function close() {
-    S.closed = true; pollAbort?.abort(); subAbort?.abort(); try { S.ws?.close(); } catch {}   // old session's WebSocket must not keep driving the shared stage
-    clearTimeout(playTimer); clearInterval(uiTimer); clearTimeout(snapTimer);
-    $('subtitle').classList.add('hidden'); $('subtitle').innerHTML = ''; subDom = null;
-    $('verdict').classList.remove('on'); $('drawer').classList.add('hidden');
+    if (S.closed) return;
+    S.closed = true;
+    S.playing = false;
+    loadGen++;
+    loadAC?.abort();
+    loadAC = null;
+    cancelTimer(retryTimer); retryTimer = 0;
+    sessionAC.abort();
+    pollAbort?.abort();
+    subAbort?.abort();
+    for (const id of timers) clearTimeout(id);
+    timers.clear();
+    clearTimeout(playTimer);
+    clearInterval(uiTimer);
+    clearTimeout(snapTimer);
+    try { S.ws?.close(); } catch {}   // old session's WebSocket must not keep driving the shared stage
+    S.ws = null;
+    subDom = null;
+    $('scrub').oninput = null; $('playBtn').onclick = null; $('liveBtn').onclick = null;
+    $('tabs').onclick = null; $('pane').onclick = null; $('drawer').onclick = null;
+    stage?.clear?.();
+    setStageMask('idle');
+    resetSessionUI();
   }
   setTab('tl');
   load();
@@ -1080,6 +1538,8 @@ function openSession(sid) {
 // =====================================================================================
 (async () => {
   await discover();
-  route();
+  const m = location.hash.match(/^#\/s\/([^/?]+)/);
+  if (m && current && current.sid === decodeURIComponent(m[1]) && current.netMode === Net.mode) return;
+  route(true);
 })();
-document.addEventListener('visibilitychange', () => { stage?.setRunning(!document.hidden); });
+document.addEventListener('visibilitychange', () => { stage?.setRunning(!document.hidden && !!current); });
