@@ -29,7 +29,12 @@ function toast(msg, ms = 2600) { const t = $('toast'); t.textContent = msg; t.cl
 // =====================================================================================
 // Connection: discover the current tunnel (stable entry = this GitHub Pages URL)
 // =====================================================================================
+const IS_DEBUG = /(^\?|&)debug(=|&|$)/.test(location.search) || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 const Net = { mode: 'connecting', base: null, fails: 0, lat: [], lastLat: null, discovering: null, seek: (n) => current?.seek(n, true) };
+if (IS_DEBUG) {
+  Net.debugSetLive = (lv, opts) => current?.debugSetLive?.(lv, opts);
+  Net.debugClearLive = () => current?.debugClearLive?.();
+}
 window.__arena = Net;
 
 async function fetchJSON(url, { timeout = 8000, signal, ...opt } = {}) {
@@ -384,7 +389,8 @@ function openSession(sid) {
   const S = { sid, topic: null, roles: [], byId: new Map(), msgs: [], status: {}, verdict: null, finalExists: false,
     cursor: 0, follow: true, playing: false, tab: 'tl', closed: false, arrival: new Map(), verdictShownFor: -1, lastBundle: 0, openItems: new Set(), live: null, ws: null };
   const ctl = { sid, close, showRole, seek };
-  let pollAbort = null, playTimer = 0, uiTimer = 0, snapTimer = 0;
+  let pollAbort = null, playTimer = 0, uiTimer = 0, snapTimer = 0, subAbort = null;
+  let subDom = null, subFollow = true, subSpeakerKey = null, subLastBody = null, subLastMeta = '';
   $('pane').innerHTML = '<div class="tl-ann"><span>加载中…</span></div>';
   $('sTitle').textContent = '加载中…'; $('kicker').textContent = '';
   $('verdict').classList.remove('on'); $('drawer').classList.add('hidden');
@@ -448,7 +454,7 @@ function openSession(sid) {
     if (j.status) { S.status = j.status; normalizeRules(); if (!S.roles.length) setupStage(); }
     if (j.verdict) S.verdict = j.verdict;
     if (j.final_exists != null) S.finalExists = j.final_exists;
-    if (j.live) { S.live = j.live; renderLive(); }
+    if ('live' in j) { S.live = j.live; renderLive(); }
     let added = 0;
     for (const m of j.messages || []) {
       if (m.idx !== S.msgs.length) continue;      // dedupe / ordering guard
@@ -531,24 +537,125 @@ function openSession(sid) {
   function liveSpeakers() {
     const lv = S.live;
     if (!lv || !running() || S.cursor < S.msgs.length) return [];
-    return Object.values(lv.speakers || {}).filter((x) => !x.done);
+    if (lv.speakers) return Object.values(lv.speakers).filter((x) => !x.done);
+    return !lv.done && lv.role_id != null ? [lv] : [];
   }
-  function renderLive() {
-    const el = $('subtitle');
-    const sp = liveSpeakers();
-    const lv = S.live;
-    const focus = sp.find((x) => String(x.role_id) === String(lv?.role_id)) || sp[0];
-    if (!focus) { el.classList.add('hidden'); return; }
-    const name = S.byId.get(Number(focus.role_id))?.name || focus.role;
+  function ensureSubtitleDom(el) {
+    if (subDom && subDom.root === el && el.contains(subDom.tx)) return subDom;
+    subAbort?.abort();
+    subAbort = new AbortController();
+    const sig = { signal: subAbort.signal };
+    el.innerHTML = `<div class="sub-head"><b class="sub-name"></b><span class="sp"></span><span class="more hidden"></span><button type="button" class="sub-latest hidden" aria-label="回到最新字幕">回到最新 ↓</button></div><div class="tx" role="region" aria-live="polite" aria-label="实时发言字幕"><span class="sub-body"></span><i class="caret"></i></div>`;
+    const head = el.querySelector('.sub-head');
+    const name = el.querySelector('.sub-name');
+    const sp = el.querySelector('.sp');
+    const more = el.querySelector('.more');
+    const latestBtn = el.querySelector('.sub-latest');
+    const tx = el.querySelector('.tx');
+    const body = el.querySelector('.sub-body');
+    const bodyText = document.createTextNode('');
+    body.appendChild(bodyText);
+    const stop = (e) => e.stopPropagation();
+    for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'touchstart', 'touchmove', 'touchend', 'wheel', 'mousedown', 'click']) {
+      el.addEventListener(ev, stop, { ...sig, passive: true });
+    }
+    tx.addEventListener('scroll', () => {
+      const dist = tx.scrollHeight - tx.scrollTop - tx.clientHeight;
+      const atBottom = dist <= 24;
+      if (atBottom !== subFollow) {
+        subFollow = atBottom;
+        latestBtn.classList.toggle('hidden', subFollow);
+      }
+    }, { ...sig, passive: true });
+    latestBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      subFollow = true;
+      latestBtn.classList.add('hidden');
+      tx.scrollTop = tx.scrollHeight;
+    }, sig);
+    subDom = { root: el, head, name, sp, more, latestBtn, tx, body, bodyText };
+    return subDom;
+  }
+  function extractLiveBody(focus) {
     let txt = focus.partial_text || '';
     const cut = txt.indexOf('【发言】');
     const pre = cut >= 0 ? '' : (txt.includes('【评估】') || txt.includes('【自省】') ? '（思考中）' : '');
     if (cut >= 0) txt = txt.slice(cut + 4);
     else if (pre) txt = txt.slice(Math.max(txt.lastIndexOf('【评估】'), txt.lastIndexOf('【自省】')) + 4);
     txt = txt.replace(/^(SHORT|TYPE|REPLY_TO|VOTE|POSITION|CONCLUSION)\s*[:：].*$/gim, '').trim();
-    const others = sp.length > 1 ? `<span class="more">+${sp.length - 1} 人同时发言</span>` : '';
-    el.innerHTML = `<b style="color:${colorOf(Number(focus.role_id))}">${esc(name)}</b><span class="sp">${esc(focus.speech || '')}</span>${others}<span class="tx">${focus.thinking && !txt ? '思考中…' : esc(pre + (txt.length > 150 ? '…' + txt.slice(-150) : txt))}<i class="caret"></i></span>`;
-    el.classList.remove('hidden');
+    return focus.thinking && !txt ? '思考中…' : (pre + txt);
+  }
+  function renderLive() {
+    const el = $('subtitle');
+    const sp = liveSpeakers();
+    const lv = S.live;
+    const focus = sp.find((x) => String(x.role_id) === String(lv?.role_id)) || sp[0];
+    if (!focus) {
+      el.classList.add('hidden');
+      subSpeakerKey = null; subLastBody = null; subLastMeta = ''; subFollow = true;
+      return;
+    }
+    const dom = ensureSubtitleDom(el);
+    const rid = Number(focus.role_id);
+    const name = S.byId.get(rid)?.name || focus.role || '';
+    const speech = focus.speech || '';
+    const moreTxt = sp.length > 1 ? `+${sp.length - 1} 人同时发言` : '';
+    const color = colorOf(rid);
+    const metaKey = `${rid}|${name}|${color}|${speech}|${moreTxt}`;
+    const speakerKey = `${focus.role_id}|${speech}|${focus.started_ms || ''}`;
+    const wasHidden = el.classList.contains('hidden');
+    const bodyTxt = extractLiveBody(focus);
+    const speakerChanged = wasHidden || speakerKey !== subSpeakerKey || (subLastBody != null && bodyTxt.length < subLastBody.length);
+
+    if (speakerChanged) {
+      subSpeakerKey = speakerKey;
+      subFollow = true;
+      dom.latestBtn.classList.add('hidden');
+    } else if (subFollow && !wasHidden) {
+      const distBefore = dom.tx.scrollHeight - dom.tx.scrollTop - dom.tx.clientHeight;
+      if (dom.tx.scrollHeight > dom.tx.clientHeight + 24 && distBefore > 24) {
+        subFollow = false;
+        dom.latestBtn.classList.remove('hidden');
+      }
+    }
+
+    if (metaKey !== subLastMeta) {
+      subLastMeta = metaKey;
+      dom.name.textContent = name;
+      dom.name.style.color = color;
+      dom.sp.textContent = speech;
+      dom.sp.classList.toggle('hidden', !speech);
+      dom.more.textContent = moreTxt;
+      dom.more.classList.toggle('hidden', !moreTxt);
+    }
+
+    const bodyChanged = bodyTxt !== subLastBody;
+    if (bodyChanged) {
+      if (!speakerChanged && subLastBody && bodyTxt.startsWith(subLastBody)) {
+        dom.bodyText.appendData(bodyTxt.slice(subLastBody.length));
+      } else {
+        dom.bodyText.nodeValue = bodyTxt;
+      }
+      subLastBody = bodyTxt;
+    }
+    if (wasHidden) el.classList.remove('hidden');
+    if (subFollow && (bodyChanged || speakerChanged || wasHidden)) {
+      dom.tx.scrollTop = dom.tx.scrollHeight;
+    }
+  }
+  if (IS_DEBUG) {
+    ctl.debugSetLive = (lv, opts = {}) => {
+      if (opts.running !== false) S.status = { ...S.status, state: 'running' };
+      if (opts.atTail !== false) { S.cursor = S.msgs.length; S.follow = true; }
+      S.live = lv;
+      renderLive();
+      return {
+        el: $('subtitle'),
+        tx: $('subtitle')?.querySelector('.tx') || null,
+        btn: $('subtitle')?.querySelector('.sub-latest') || null,
+      };
+    };
+    ctl.debugClearLive = () => { S.live = null; renderLive(); };
   }
   function recordLiveLatency(lv) {
     if (lv && lv.ts_ms) { const l = Date.now() - lv.ts_ms; if (l >= 0 && l < 60000) (Net.liveLat = Net.liveLat || []).push(l); }
@@ -858,7 +965,7 @@ function openSession(sid) {
     renderHeader(); renderControls(); renderPane();
     const f = computeFrame();
     stage?.update(f);
-    renderVoteBar(f); renderTimerCard(f);
+    renderVoteBar(f); renderTimerCard(f); renderLive();
     if (f.showVerdict && S.verdictShownFor !== sid + S.cursor && S.cursor === S.msgs.findIndex((x) => x.type === 'verdict') + 1) {
       S.verdictShownFor = sid + S.cursor; showVerdictOverlay();
     }
@@ -923,7 +1030,9 @@ function openSession(sid) {
   }
 
   function close() {
-    S.closed = true; pollAbort?.abort(); try { S.ws?.close(); } catch {}   // old session's WebSocket must not keep driving the shared stage clearTimeout(playTimer); clearInterval(uiTimer); clearTimeout(snapTimer);
+    S.closed = true; pollAbort?.abort(); subAbort?.abort(); try { S.ws?.close(); } catch {}   // old session's WebSocket must not keep driving the shared stage
+    clearTimeout(playTimer); clearInterval(uiTimer); clearTimeout(snapTimer);
+    $('subtitle').classList.add('hidden'); $('subtitle').innerHTML = ''; subDom = null;
     $('verdict').classList.remove('on'); $('drawer').classList.add('hidden');
   }
   setTab('tl');

@@ -263,12 +263,20 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: .01s !important; transition-duration: .01s !important; } }
 
 /* ---- v2: subtitle, phase bar, thinking process, skills ---- */
-.subtitle { position: absolute; left: 50%; bottom: 72px; transform: translateX(-50%); z-index: 7; width: min(860px, calc(100% - 24px));
-  background: rgba(16, 14, 12, .82); color: #fff; border-radius: 12px; padding: 9px 14px; font-size: 15px; line-height: 1.55;
-  box-shadow: 0 8px 26px rgba(0,0,0,.3); pointer-events: none; }
-.subtitle b { margin-right: 8px; } .subtitle .sp { font-size: 11.5px; background: rgba(255,255,255,.14); border-radius: 5px; padding: 1px 6px; margin-right: 8px; }
-.subtitle .more { font-size: 11.5px; color: #ffd27a; margin-right: 8px; }
-.subtitle .tx { display: block; margin-top: 3px; max-height: 3.2em; overflow: hidden; }
+.subtitle { position: absolute; left: 50%; bottom: calc(74px + var(--safe-b)); transform: translateX(-50%); z-index: 7; width: min(860px, calc(100% - 24px));
+  display: flex; flex-direction: column; max-height: min(260px, 40%);
+  background: rgba(16, 14, 12, .86); color: #fff; border-radius: 12px; padding: 8px 14px 10px; font-size: 15px; line-height: 1.55;
+  box-shadow: 0 8px 26px rgba(0,0,0,.3); pointer-events: auto; touch-action: pan-y; }
+.subtitle .sub-head { display: flex; align-items: center; gap: 6px; flex: none; min-height: 32px; min-width: 0; }
+.subtitle b, .subtitle .sub-name { font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.subtitle .sp { flex: none; font-size: 11.5px; background: rgba(255,255,255,.14); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+.subtitle .more { flex: none; font-size: 11.5px; color: #ffd27a; white-space: nowrap; }
+.subtitle .sub-latest { margin-left: auto; flex: none; border: 1px solid rgba(255,210,122,.45); background: rgba(255,210,122,.18); color: #ffd27a;
+  border-radius: 999px; padding: 0 11px; min-height: 32px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; white-space: nowrap; touch-action: manipulation; }
+.subtitle .sub-latest:hover { background: rgba(255,210,122,.3); }
+.subtitle .tx { display: block; flex: 1 1 auto; min-height: 0; margin-top: 4px; max-height: 12.4em; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain; touch-action: pan-y; white-space: pre-wrap; word-break: break-word; padding-right: 4px;
+  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.32) transparent; }
 .subtitle .caret { display: inline-block; width: 2px; height: 1em; background: #ffd27a; margin-left: 2px; vertical-align: -2px; animation: blink 1s infinite; }
 .phasebar { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); z-index: 5; display: flex; gap: 3px; padding: 5px 7px; max-width: calc(100% - 24px); overflow-x: auto; }
 .phasebar .ps { font: 700 11px var(--mono); padding: 3px 6px; border-radius: 6px; background: rgba(255,255,255,.08); color: #a9a39a; white-space: nowrap; }
@@ -283,7 +291,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .vbox .by .fb, .fb { color: #b45309; }
 .tag.dim { opacity: .45; }
 @media (max-width: 900px) {
-  .subtitle { bottom: 58px; font-size: 13px; padding: 7px 10px; } .subtitle .tx { max-height: 3em; }
+  .subtitle { bottom: calc(74px + var(--safe-b)); font-size: 13px; line-height: 1.5; padding: 6px 10px 8px; max-height: min(176px, 40%); }
+  .subtitle .sub-head { min-height: 36px; }
+  .subtitle .tx { max-height: 9em; }
   .phasebar { top: 52px; } .phasebar .ps { font-size: 10px; padding: 2px 4px; }
 }
 .votebar { top: 70px; bottom: auto; }
@@ -297,6 +307,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .field small label { display: inline-flex; align-items: center; min-height: 32px; cursor: pointer; }
 @media (max-width: 900px), (pointer: coarse) {
   .btn, .btn.small, .chip-btn, .live-btn, #testToggle { min-height: 40px; }
+  .subtitle .sub-latest { min-height: 36px; padding: 0 12px; }
   .btn.small { padding: 6px 12px; }
   .iconbtn, .iconbtn.playbtn { width: 40px; height: 40px; }
   .live-btn { min-width: 52px; }

@@ -28,23 +28,31 @@ function toon(color, extra) {
   if (!m) { m = new THREE.MeshToonMaterial({ color, gradientMap: gradTex, ...(extra || {}) }); matCache.set(key, m); }
   return m;
 }
-const SEG = IS_MOBILE ? 0.6 : 1;
-const s = (n) => Math.max(6, Math.round(n * SEG));
+const SEG = IS_MOBILE ? 0.65 : 1;
+const s = (n, min = 5) => Math.max(min, Math.round(n * SEG));
 const G = {
-  sphere: new THREE.SphereGeometry(1, s(22), s(14)),
-  sphereLo: new THREE.SphereGeometry(1, 10, 7),
-  hemi: new THREE.SphereGeometry(1, s(22), s(10), 0, Math.PI * 2, 0, Math.PI / 2),
-  cyl: new THREE.CylinderGeometry(1, 1, 1, s(20)),
-  cylOpen: new THREE.CylinderGeometry(1, 1, 1, s(20), 1, true),
-  cone: new THREE.ConeGeometry(1, 1, s(14)),
-  torus: new THREE.TorusGeometry(1, 0.13, 6, s(24)),
-  torusSq: new THREE.TorusGeometry(1, 0.13, 6, 4),
-  arc: new THREE.TorusGeometry(1, 0.22, 6, 12, Math.PI),
+  sphere: new THREE.SphereGeometry(1, s(16, 10), s(12, 8)),
+  sphereLo: new THREE.SphereGeometry(1, 8, 5),
+  sphereMid: new THREE.SphereGeometry(1, s(10, 7), s(7, 5)),
+  hemi: new THREE.SphereGeometry(1, s(16, 10), s(8, 6), 0, Math.PI * 2, 0, Math.PI / 2),
+  faceCap: new THREE.SphereGeometry(1, s(12, 8), s(9, 6), Math.PI / 2 - 0.54, 1.08, Math.PI / 2 - 0.52, 1.04),
+  cyl: new THREE.CylinderGeometry(1, 1, 1, s(12, 8)),
+  cylOpen: new THREE.CylinderGeometry(1, 1, 1, s(12, 8), 1, true),
+  taperCyl: new THREE.CylinderGeometry(0.84, 1, 1, s(10, 7)),
+  limbCyl: new THREE.CylinderGeometry(0.86, 1, 1, 8),
+  cone: new THREE.ConeGeometry(1, 1, s(10, 6)),
+  torus: new THREE.TorusGeometry(1, 0.13, 5, s(16, 10)),
+  torusThin: new THREE.TorusGeometry(1, 0.085, 5, s(16, 10)),
+  torusSq: new THREE.TorusGeometry(1, 0.13, 5, 4),
+  torusSqThin: new THREE.TorusGeometry(1, 0.075, 5, 4),
+  arc: new THREE.TorusGeometry(1, 0.22, 5, 10, Math.PI),
   box: new THREE.BoxGeometry(1, 1, 1),
-  leg: new THREE.CapsuleGeometry(0.075, 0.14, 3, 8),
-  arm: new THREE.CapsuleGeometry(0.06, 0.15, 3, 8),
-  torso: new THREE.CapsuleGeometry(0.21, 0.16, 4, s(14)),
+  disc: new THREE.CircleGeometry(1, s(14, 10)),
+  leg: new THREE.CapsuleGeometry(0.075, 0.14, 2, 6),
+  arm: new THREE.CapsuleGeometry(0.06, 0.15, 2, 6),
+  torso: new THREE.CapsuleGeometry(0.21, 0.16, 3, s(10, 7)),
 };
+const G_SET = new Set(Object.values(G));
 function mesh(geo, mat, o = {}) {
   const m = new THREE.Mesh(geo, typeof mat === 'object' && mat.isMaterial ? mat : toon(mat));
   if (o.p) m.position.set(...o.p);
@@ -55,10 +63,240 @@ function mesh(geo, mat, o = {}) {
   if (o.parent) o.parent.add(m);
   return m;
 }
+function mergeStaticGroup(group, skipSet) {
+  const byMat = new Map();
+  for (const child of [...group.children]) {
+    if (!child.isMesh || skipSet?.has(child)) continue;
+    if (child.material?.transparent || child.renderOrder) continue;
+    let list = byMat.get(child.material);
+    if (!list) { list = []; byMat.set(child.material, list); }
+    list.push(child);
+  }
+  const normMat = new THREE.Matrix3();
+  const v = new THREE.Vector3();
+  for (const [mat, meshes] of byMat) {
+    if (meshes.length < 2) continue;
+    const parts = [];
+    let totalVerts = 0;
+    let cast = false, recv = false;
+    for (const m of meshes) {
+      m.updateMatrix();
+      let g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+      const pos = g.getAttribute('position');
+      const norm = g.getAttribute('normal');
+      if (!pos || !norm) { g.dispose(); continue; }
+      normMat.getNormalMatrix(m.matrix);
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(m.matrix);
+        pos.setXYZ(i, v.x, v.y, v.z);
+        v.fromBufferAttribute(norm, i).applyMatrix3(normMat).normalize();
+        norm.setXYZ(i, v.x, v.y, v.z);
+      }
+      totalVerts += pos.count;
+      parts.push(g);
+      if (m.castShadow) cast = true;
+      if (m.receiveShadow) recv = true;
+    }
+    if (parts.length < 2) { parts.forEach((g) => g.dispose()); continue; }
+    const posArr = new Float32Array(totalVerts * 3);
+    const normArr = new Float32Array(totalVerts * 3);
+    let off = 0;
+    for (const g of parts) {
+      const p = g.getAttribute('position').array;
+      const n = g.getAttribute('normal').array;
+      posArr.set(p, off);
+      normArr.set(n, off);
+      off += p.length;
+      g.dispose();
+    }
+    const merged = new THREE.BufferGeometry();
+    merged.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+    merged.setAttribute('normal', new THREE.BufferAttribute(normArr, 3));
+    const combined = new THREE.Mesh(merged, mat);
+    combined.castShadow = cast;
+    combined.receiveShadow = recv;
+    for (const m of meshes) group.remove(m);
+    group.add(combined);
+  }
+}
 function canvasTex(w, h) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return { c, g: c.getContext('2d'), t };
+}
+
+// ---------------------------------------------------------------- photo avatar loader & texture cache (<= 256px)
+const photoImgCache = new Map();
+const badgeTexCache = new Map();
+const badgeMatCache = new Map();
+const faceTexCache = new Map();
+const pendingTexPromises = new Set();
+const texStats = { requested: 0, loaded: 0, failed: 0 };
+function trackTexPromise(p) {
+  pendingTexPromises.add(p);
+  p.finally(() => pendingTexPromises.delete(p));
+  return p;
+}
+export function waitForTextures() {
+  return Promise.all([...pendingTexPromises]);
+}
+if (typeof window !== 'undefined') {
+  window.__stageTexturesReady = waitForTextures;
+  window.__stageTexStats = () => ({ ...texStats, pending: pendingTexPromises.size });
+}
+
+function resolvePhotoPath(personaId, role) {
+  const av = role?.avatar;
+  if (av && /\.(jpe?g|png|webp)(\?|$)/i.test(av)) return av;
+  if (personaId) return `assets/avatars/photo/${personaId}.jpg`;
+  return null;
+}
+function photoFetchUrl(path) {
+  if (/^(https?:|data:|blob:|\/)/i.test(path)) return path;
+  return new URL('../' + path.replace(/^\.\//, ''), import.meta.url).href;
+}
+function mimeFromPath(path) {
+  const ext = String(path).split('?')[0].split('.').pop().toLowerCase();
+  return ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' })[ext] || 'image/jpeg';
+}
+function loadPhotoImage(path) {
+  if (!path) return Promise.resolve(null);
+  if (photoImgCache.has(path)) return photoImgCache.get(path);
+  const p = trackTexPromise((async () => {
+    try {
+      const pre = typeof window !== 'undefined' ? window.__personas?.data?.get(path) : null;
+      if (pre) {
+        const img = new Image();
+        img.src = pre;
+        await img.decode();
+        return img;
+      }
+      const url = photoFetchUrl(path);
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const rawBlob = await res.blob();
+      const blob = rawBlob.type && rawBlob.type.startsWith('image/') ? rawBlob : new Blob([rawBlob], { type: mimeFromPath(path) });
+      if (typeof createImageBitmap === 'function') {
+        try { return await createImageBitmap(blob); } catch {}
+      }
+      const dataUrl = await new Promise((ok, err) => {
+        const fr = new FileReader();
+        fr.onload = () => ok(fr.result);
+        fr.onerror = err;
+        fr.readAsDataURL(blob);
+      });
+      const img = new Image();
+      img.src = dataUrl;
+      await img.decode();
+      return img;
+    } catch {
+      return null;
+    }
+  })());
+  photoImgCache.set(path, p);
+  return p;
+}
+function getBadgeMaterial(path) {
+  if (!path) return null;
+  if (badgeMatCache.has(path)) return badgeMatCache.get(path);
+  let t = badgeTexCache.get(path);
+  const mat = new THREE.MeshBasicMaterial({ map: null });
+  if (!t) {
+    const ct = canvasTex(128, 128);
+    t = ct.t;
+    const { g } = ct;
+    g.fillStyle = '#e5e7eb'; g.fillRect(0, 0, 128, 128);
+    t.needsUpdate = true;
+    badgeTexCache.set(path, t);
+    texStats.requested += 1;
+    trackTexPromise(loadPhotoImage(path).then((img) => {
+      if (!img) { texStats.failed += 1; return; }
+      g.clearRect(0, 0, 128, 128);
+      g.save();
+      g.beginPath(); g.arc(64, 64, 62, 0, Math.PI * 2); g.clip();
+      const iw = img.width || 512, ih = img.height || 512;
+      const sq = Math.min(iw, ih);
+      g.drawImage(img, (iw - sq) / 2, (ih - sq) * 0.16, sq, sq, 0, 0, 128, 128);
+      g.restore();
+      t.needsUpdate = true;
+      mat.needsUpdate = true;
+      texStats.loaded += 1;
+    }));
+  }
+  mat.map = t;
+  badgeMatCache.set(path, mat);
+  return mat;
+}
+function getFaceDecalTexture(path, crop, skinHex, onReady) {
+  if (!path || !crop) return null;
+  const key = `${path}|${crop.join(',')}|${skinHex}`;
+  if (faceTexCache.has(key)) {
+    const entry = faceTexCache.get(key);
+    if (entry.ready) onReady?.(entry.tex);
+    else if (onReady) entry.waiters.push(onReady);
+    return entry.tex;
+  }
+  const { g, t } = canvasTex(256, 256);
+  const entry = { tex: t, ready: false, waiters: onReady ? [onReady] : [] };
+  faceTexCache.set(key, entry);
+  trackTexPromise(loadPhotoImage(path).then((img) => {
+    if (!img) return;
+    const iw = img.width || 512, ih = img.height || 512;
+    const [cx, cy, rx, ry] = crop;
+    const sx = clamp((cx - rx * 1.12) * iw, 0, iw - 1);
+    const sy = clamp((cy - ry * 1.12) * ih, 0, ih - 1);
+    const sw = clamp(rx * 2.24 * iw, 8, iw - sx);
+    const sh = clamp(ry * 2.24 * ih, 8, ih - sy);
+    g.clearRect(0, 0, 256, 256);
+    g.drawImage(img, sx, sy, sw, sh, 0, 0, 256, 256);
+    // Warm skin-harmony pass for desaturated / B&W historical photos
+    const px = g.getImageData(64, 64, 128, 128).data;
+    let satSum = 0;
+    for (let i = 0; i < px.length; i += 16) {
+      const r = px[i], gr = px[i + 1], b = px[i + 2];
+      satSum += Math.max(r, gr, b) - Math.min(r, gr, b);
+    }
+    const avgSat = satSum / (px.length / 16);
+    if (avgSat < 18) {
+      g.save();
+      g.globalCompositeOperation = 'color';
+      g.globalAlpha = 0.62;
+      g.fillStyle = skinHex;
+      g.fillRect(0, 0, 256, 256);
+      g.restore();
+    }
+    // Elliptical skin-matched feathering around the perimeter so edges melt into 3D skin
+    const skinCol = new THREE.Color(skinHex);
+    const sr = Math.round(skinCol.r * 255), sg = Math.round(skinCol.g * 255), sb = Math.round(skinCol.b * 255);
+    g.save();
+    g.translate(128, 128);
+    g.scale(0.88, 1.04);
+    const edgeGrad = g.createRadialGradient(0, 0, 56, 0, 0, 124);
+    edgeGrad.addColorStop(0, `rgba(${sr},${sg},${sb},0)`);
+    edgeGrad.addColorStop(0.56, `rgba(${sr},${sg},${sb},0.18)`);
+    edgeGrad.addColorStop(0.85, `rgba(${sr},${sg},${sb},0.88)`);
+    edgeGrad.addColorStop(1, `rgba(${sr},${sg},${sb},1)`);
+    g.fillStyle = edgeGrad;
+    g.fillRect(-150, -150, 300, 300);
+    g.restore();
+    g.save();
+    g.globalCompositeOperation = 'destination-in';
+    g.translate(128, 128);
+    g.scale(0.88, 1.04);
+    const maskGrad = g.createRadialGradient(0, 0, 68, 0, 0, 124);
+    maskGrad.addColorStop(0, 'rgba(255,255,255,1)');
+    maskGrad.addColorStop(0.68, 'rgba(255,255,255,0.92)');
+    maskGrad.addColorStop(0.90, 'rgba(255,255,255,0.32)');
+    maskGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = maskGrad;
+    g.fillRect(-150, -150, 300, 300);
+    g.restore();
+    t.needsUpdate = true;
+    entry.ready = true;
+    for (const cb of entry.waiters) cb(t);
+    entry.waiters.length = 0;
+  }));
+  return t;
 }
 
 // ---------------------------------------------------------------- paddles (billboards → always readable)
@@ -325,214 +563,596 @@ class Bot {
     return { main, light };
   }
 
-  // 人格辩手：按人物外形定制（发型、发色、胡子、眼镜、服装颜色、标志性配饰）。
-  // Keeps the same rig fields as build() so all animations, gestures and paddles still work.
-  buildPersona(L) {
+  // 人格辩手：精细人体比例（~1:4.7）+ 脸型/五官/专人发型/胡须/眼镜/分层服饰 + 照片贴花与胸前名牌。
+  // Keeps all rig fields as build() so animations, gestures, picking and paddles work identically.
+  buildPersona(L, role = null, opts = {}) {
     while (this.root.children.length) this.root.remove(this.root.children[0]);
     const R = this.root;
-    const body = new THREE.Group(); R.add(body); this.body = body;
-    const skin = L.skin || '#f1c7a0', hair = L.hair || '#2b2320';
-    const main = new THREE.Color(L.outfit_color || '#555555');
+    const hScale = L.height || 1.0;
+    const build = L.build || 1.0;
+    const wScale = 1 + (build - 1) * 1.15;
+    const dScale = 1 + (build - 1) * 1.05;
+    const shoulderScale = L.shoulder_scale || (build >= 1.2 ? 1.04 : 1);
+    const stoop = L.posture === 'stoop';
+    const body = new THREE.Group();
+    if (stoop) body.rotation.x = 0.09;
+    body.scale.setScalar(hScale);
+    R.add(body);
+    this.body = body;
+
+    const skin = L.skin || '#efc39c';
+    const skinShadow = new THREE.Color(skin).offsetHSL(0, 0.04, -0.1);
+    const skinSoftShadow = new THREE.Color(skin).offsetHSL(0, 0.02, -0.055);
+    const lipCol = new THREE.Color(skin).offsetHSL(-0.02, 0.16, -0.18);
+    const hair = L.hair || '#231c18';
+    const bc = L.beard_color || hair;
+    const main = new THREE.Color(L.outfit_color || '#334155');
+    const mainDark = main.clone().offsetHSL(0, 0, -0.09);
+    const mainLight = main.clone().offsetHSL(0, -0.05, 0.15);
     const accent = new THREE.Color(L.accent || '#c9a13b');
-    const light = main.clone().offsetHSL(0, -0.05, 0.18);
-    this.color = '#' + (main.getHSL({}).l < 0.25 || main.getHSL({}).l > 0.85 ? accent : main).getHexString();
-    const chub = L.build || 1;
+    const innerCol = L.inner_color || (L.outfit === 'jacket' ? '#20242c' : '#f4f6f9');
+    this.color = '#' + (main.getHSL({}).l < 0.22 || main.getHSL({}).l > 0.85 ? accent : main).getHexString();
+
     const long = L.outfit === 'robe' || L.outfit === 'changshan';
-    const pants = L.accessory === 'jeans' ? '#2f4b7c' : long ? main : '#2c2c30';
-    const shoe = L.accessory === 'sandals' ? '#8b5a2b' : L.accessory === 'jeans' ? '#9ca3af' : '#1f1b18';
-    this.legs = [-1, 1].map((s) => {
-      const p = new THREE.Group(); p.position.set(0.1 * s * chub, 0.3, 0); body.add(p);
-      mesh(G.leg, pants, { p: [0, -0.13, 0], cast: true, parent: p });
-      mesh(G.sphere, shoe, { p: [0, -0.27, 0.035], s: [0.09, 0.06, 0.125], cast: true, parent: p });
-      return p;
+    const shortSleeve = L.outfit === 'tee' || L.outfit === 'polo';
+    const pants = L.pants_color || (L.accessory === 'jeans' ? '#36588a' : long ? main : L.outfit === 'polo' ? '#6b5e50' : '#23262e');
+    const shoeCol = L.accessory === 'sandals' ? '#8b5a2b' : L.accessory === 'jeans' ? '#b8bec7' : '#19181a';
+
+    // 1. Legs (thigh + knee + shin + sculpted shoe/sandal) — hip pivot at y = 0.74
+    this.knees = [];
+    this.legs = [-1, 1].map((side) => {
+      const hip = new THREE.Group(); hip.position.set(0.098 * side * wScale, 0.74, 0); body.add(hip);
+      const legR = 0.068 * (0.35 + 0.65 * wScale);
+      mesh(G.sphereMid, pants, { p: [0, -0.02, 0], s: [legR, legR, legR], parent: hip });
+      mesh(G.limbCyl, pants, { p: [0, -0.17, 0], s: [legR * 0.96, 0.31, legR * 0.96], cast: true, parent: hip });
+      const knee = new THREE.Group(); knee.position.set(0, -0.34, 0); hip.add(knee);
+      this.knees.push(knee);
+      mesh(G.sphereLo, pants, { s: legR * 0.82, parent: knee });
+      const shinCol = L.accessory === 'sandals' ? skin : pants;
+      mesh(G.limbCyl, shinCol, { p: [0, -0.16, 0], s: [legR * 0.78, 0.30, legR * 0.78], cast: true, parent: knee });
+      // Foot / Shoe
+      if (L.accessory === 'sandals') {
+        mesh(G.box, shoeCol, { p: [0, -0.34, 0.032], s: [0.095, 0.024, 0.19], cast: true, parent: knee });
+        mesh(G.sphereMid, skin, { p: [0, -0.32, 0.03], s: [0.044, 0.026, 0.088], parent: knee });
+        mesh(G.box, shoeCol, { p: [0, -0.305, 0.045], s: [0.09, 0.014, 0.03], parent: knee });
+      } else {
+        mesh(G.sphereMid, shoeCol, { p: [0, -0.33, 0.04], s: [0.055, 0.04, 0.095], cast: true, parent: knee });
+        mesh(G.box, shoeCol, { p: [0, -0.348, 0.02], s: [0.098, 0.03, 0.175], cast: true, parent: knee });
+        if (L.accessory === 'jeans') mesh(G.box, '#eef0f3', { p: [0, -0.362, 0.025], s: [0.101, 0.015, 0.18], parent: knee });
+      }
+      return hip;
     });
-    const torso = mesh(G.torso, main, { p: [0, 0.5, 0], s: [chub, 1, chub * 0.92], cast: true, recv: true, parent: body });
-    this.torso = torso;
-    const front = 0.2 * chub;
-    if (long) {   // robe / changshan: gown down to the ankles
-      mesh(G.cone, main, { p: [0, 0.3, 0], s: [0.3 * chub, 0.52, 0.27 * chub], r: [Math.PI, 0, 0], cast: true, parent: body });
+
+    // 2. Pelvis, Waist, Chest, Shoulders, Neck
+    const chestW = 0.205 * wScale * shoulderScale, chestD = 0.125 * dScale;
+    const belly = L.belly ?? (build > 1.12 ? 1 + (build - 1.1) * 1.0 : 1);
+    const waistW = 0.162 * wScale * belly, waistD = 0.112 * dScale * belly;
+    const bodySkip = new Set();
+    mesh(G.sphereMid, pants, { p: [0, 0.74, 0], s: [0.168 * wScale * Math.max(1, belly * 0.92), 0.085, 0.115 * dScale * Math.max(1, belly * 0.92)], cast: true, parent: body });
+    mesh(G.taperCyl, main, { p: [0, 0.87, 0], s: [waistW, 0.19, waistD], cast: true, recv: true, parent: body });
+    if (belly >= 1.12) {
+      mesh(G.sphereMid, main, { p: [0, 0.90, chestD * 0.26], s: [waistW * 0.96, 0.145, waistD * 1.04], cast: true, recv: true, parent: body });
+    }
+    mesh(G.taperCyl, main, { p: [0, 1.06, 0], s: [chestW, 0.22, chestD], r: [Math.PI, 0, 0], cast: true, recv: true, parent: body });
+    // Upper chest cap & shoulder fullness
+    mesh(G.sphereMid, main, { p: [0, 1.13, 0], s: [chestW * 0.94, 0.08, chestD * 0.92], cast: true, parent: body });
+    // Neck (thicker for stockier builds, slimmer for lean builds)
+    const neckZ = stoop ? 0.025 : 0;
+    const neckR = 0.054 * (L.neck_scale || (1 + (build - 1) * 1.15));
+    mesh(G.cyl, skin, { p: [0, 1.22, neckZ], s: [neckR, 0.12, neckR], r: [stoop ? -0.14 : 0, 0, 0], cast: true, parent: body });
+
+    // 3. Outfits & Collars
+    const frontZ = chestD * 0.92;
+    const hipZ = waistD * 0.96;
+    const lapelCol = main.clone().offsetHSL(0, 0, main.getHSL({}).l < 0.22 ? 0.045 : -0.05);
+    if (long) {
+      // Lower gown skirt over legs (slimmer cut for lean figures like Lu Xun)
+      const skirtW = (build < 0.92 ? 0.202 : 0.235) * wScale;
+      mesh(G.taperCyl, main, { p: [0, 0.44, 0], s: [skirtW, 0.64, 0.185 * dScale], r: [Math.PI, 0, 0], cast: true, recv: true, parent: body });
       if (L.outfit === 'robe') {
-        if (L.hair_style === 'topknot' || L.accessory === 'scholar-hat') {
-          // Hanfu crossed collar (交领) + wide waist sash
-          [-1, 1].forEach((s) => mesh(G.box, accent, { p: [0.03 * s, 0.62, front], s: [0.045, 0.22, 0.025], r: [0, 0, -0.42 * s], parent: body }));
-          mesh(G.cyl, accent, { p: [0, 0.44, 0], s: [0.225 * chub, 0.06, 0.21 * chub], parent: body });
+        if (L.accessory === 'scholar-hat' || L.hair_style === 'topknot') {
+          // Hanfu (孔子): white inner collar + vivid royal blue crossed lapels + gold belt sash
+          const beltCol = L.belt_color || mainDark;
+          mesh(G.torus, innerCol, { p: [0, 1.175, 0.01], s: [0.082, 0.082, 0.22], r: [Math.PI / 2, 0, 0], parent: body });
+          mesh(G.box, accent, { p: [-0.032, 1.06, frontZ + 0.002], s: [0.046, 0.24, 0.016], r: [0.08, 0, -0.42], parent: body });
+          mesh(G.box, accent, { p: [0.032, 1.06, frontZ + 0.006], s: [0.046, 0.24, 0.016], r: [0.08, 0, 0.42], parent: body });
+          mesh(G.cyl, beltCol, { p: [0, 0.85, 0], s: [waistW * 1.05, 0.058, waistD * 1.05], parent: body });
+          mesh(G.box, beltCol, { p: [0.05, 0.71, hipZ + 0.015], s: [0.048, 0.26, 0.016], parent: body });
         } else {
-          // Greek draped himation fold + waist sash
-          mesh(G.box, accent, { p: [0.02, 0.54, front - 0.005], s: [0.065, 0.44, 0.03], r: [0, 0, 0.58], parent: body });
-          mesh(G.cyl, accent, { p: [0, 0.43, 0], s: [0.22 * chub, 0.04, 0.205 * chub], parent: body });
+          // Greek draped himation (苏格拉底): diagonal shoulder drape fold + warm sash
+          mesh(G.box, mainLight, { p: [-0.02, 1.04, frontZ + 0.004], s: [0.11, 0.32, 0.024], r: [0.08, 0, 0.54], cast: true, parent: body });
+          mesh(G.box, accent, { p: [0.01, 1.02, frontZ + 0.012], s: [0.03, 0.32, 0.016], r: [0.08, 0, 0.54], parent: body });
+          mesh(G.cyl, accent, { p: [0, 0.84, 0], s: [waistW * 1.03, 0.04, waistD * 1.03], parent: body });
         }
       } else {
-        // Changshan: Mandarin high collar + vertical placket + frog buttons (盘扣)
-        mesh(G.cyl, main.clone().offsetHSL(0, 0, -0.06), { p: [0, 0.73, 0], s: [0.13, 0.07, 0.13], parent: body });
-        mesh(G.box, accent, { p: [0, 0.42, front], s: [0.045, 0.52, 0.02], parent: body });
-        [0.64, 0.56, 0.48].forEach((y) => mesh(G.box, '#1b1d22', { p: [0.015, y, front + 0.012], s: [0.04, 0.012, 0.01], parent: body }));
+        // Changshan (鲁迅): crisp Mandarin stand collar + center placket + frog buttons
+        mesh(G.cyl, mainDark, { p: [0, 1.19, 0], s: [0.078, 0.065, 0.078], parent: body });
+        mesh(G.box, accent, { p: [0, 0.78, frontZ + 0.002], s: [0.028, 0.72, 0.012], parent: body });
+        [1.11, 1.01, 0.91, 0.81].forEach((y) => mesh(G.box, '#1b1d22', { p: [0.01, y, frontZ + 0.009], s: [0.04, 0.011, 0.009], parent: body }));
       }
     }
     if (L.outfit === 'turtleneck') {
-      mesh(G.cyl, main, { p: [0, 0.74, 0], s: [0.145, 0.13, 0.145], parent: body });
-      if (L.accessory === 'jeans') mesh(G.cyl, '#27272a', { p: [0, 0.34, 0], s: [0.205 * chub, 0.035, 0.19 * chub], parent: body });
+      mesh(G.cyl, main, { p: [0, 1.21, 0], s: [0.076, 0.095, 0.076], parent: body });
+      mesh(G.cyl, '#1f2024', { p: [0, 0.79, 0], s: [waistW * 1.02, 0.03, waistD * 1.02], parent: body });
     }
     if (L.outfit === 'suit' || L.outfit === 'jacket') {
-      const inner = L.inner_color || '#ffffff';
-      mesh(G.cone, inner, { p: [0, 0.63, front - 0.005], s: [0.085, 0.19, 0.02], r: [Math.PI, 0, 0], parent: body });
-      [-1, 1].forEach((s) => mesh(G.box, main.clone().offsetHSL(0, 0, -0.06), { p: [0.07 * s, 0.6, front + 0.006], s: [0.055, 0.22, 0.022], r: [0, 0, 0.35 * s], parent: body }));
+      if (L.zip_jacket) {
+        // Casual zip-up jacket over crew-neck tee (张雪峰) — rounded collar + visible front zipper
+        const colR = Math.max(0.082, neckR * 1.12);
+        mesh(G.torus, mainDark, { p: [0, 1.175, 0], s: [colR, colR, 0.22], r: [Math.PI / 2, 0, 0], parent: body });
+        mesh(G.cone, innerCol, { p: [0, 1.10, frontZ - 0.002], s: [0.068, 0.13, 0.028], r: [Math.PI, 0, 0], parent: body });
+        mesh(G.box, L.accent || '#717885', { p: [0, 0.91, Math.max(frontZ, waistD * 0.92) + 0.004], s: [0.01, 0.25, 0.01], parent: body });
+      } else {
+        // Tailored inner shirt V-opening + crisp collar + flush lapels (no protruding black bars)
+        const wideV = L.outfit === 'jacket' && !L.tie_color && L.accessory !== 'x-logo';
+        const vW = wideV ? 0.095 : 0.072;
+        mesh(G.cone, innerCol, { p: [0, 1.065, frontZ - 0.004], s: [vW, 0.23, 0.032], r: [Math.PI, 0, 0], parent: body });
+        [-1, 1].forEach((side) => {
+          mesh(G.box, lapelCol, { p: [0.048 * side, 1.07, frontZ + 0.002], s: [0.032, 0.20, 0.012], r: [0.10, 0, 0.24 * side], parent: body });
+          mesh(G.box, innerCol, { p: [0.034 * side, 1.17, frontZ * 0.80], s: [0.046, 0.028, 0.02], r: [0.2, 0, -0.42 * side], parent: body });
+        });
+        [0.9, 0.82].forEach((y) => mesh(G.sphereLo, '#27272a', { p: [0.02, y, hipZ + 0.004], s: 0.01, parent: body }));
+      }
     }
     if (L.outfit === 'shirt') {
-      [-1, 1].forEach((s) => mesh(G.box, light, { p: [0.05 * s, 0.72, 0.15], s: [0.075, 0.038, 0.03], r: [0, 0, -0.5 * s], parent: body }));
+      [-1, 1].forEach((side) => mesh(G.box, mainDark, { p: [0.042 * side, 1.175, frontZ * 0.78], s: [0.055, 0.032, 0.024], r: [0.2, 0, -0.42 * side], parent: body }));
+      mesh(G.box, '#1b1d22', { p: [0, 0.79, 0], s: [waistW * 1.98, 0.028, waistD * 1.98], parent: body });
     }
     if (L.outfit === 'polo') {
-      [-1, 1].forEach((s) => mesh(G.box, main.clone().offsetHSL(0, 0, -0.08), { p: [0.06 * s, 0.72, 0.15], s: [0.08, 0.04, 0.03], r: [0, 0, -0.45 * s], parent: body }));
-      mesh(G.box, main.clone().offsetHSL(0, 0, -0.06), { p: [0, 0.63, front + 0.004], s: [0.04, 0.14, 0.014], parent: body });
-      [0.67, 0.61].forEach((y) => mesh(G.sphereLo, accent, { p: [0, y, front + 0.012], s: 0.01, parent: body }));
+      mesh(G.torus, mainDark, { p: [0, 1.18, 0], s: [0.076, 0.076, 0.25], r: [Math.PI / 2, 0, 0], parent: body });
+      [-1, 1].forEach((side) => mesh(G.box, mainLight, { p: [0.05 * side, 1.17, frontZ * 0.82], s: [0.06, 0.036, 0.024], r: [0.2, 0, -0.35 * side], parent: body }));
+      mesh(G.box, mainDark, { p: [0, 1.07, frontZ + 0.004], s: [0.034, 0.13, 0.014], parent: body });
+      [1.11, 1.05].forEach((y) => mesh(G.sphereLo, accent, { p: [0, y, frontZ + 0.012], s: 0.009, parent: body }));
     }
-    if (L.outfit === 'hoodie') {
-      mesh(G.torus, main.clone().offsetHSL(0, 0, -0.05), { p: [0, 0.74, -0.05], s: [0.17, 0.17, 0.7], r: [Math.PI / 2 - 0.3, 0, 0], parent: body });
-      [-1, 1].forEach((s) => mesh(G.cyl, accent, { p: [0.04 * s, 0.6, front], s: [0.008, 0.14, 0.008], parent: body }));
+    if (L.outfit === 'tee') {
+      mesh(G.torus, mainDark, { p: [0, 1.175, 0], s: [0.078, 0.078, 0.2], r: [Math.PI / 2, 0, 0], parent: body });
+      if (L.accent && L.hair_style === 'curly-saltpepper') {
+        mesh(G.cone, skin, { p: [0, 1.13, frontZ * 0.88], s: [0.035, 0.08, 0.016], r: [Math.PI, 0, 0], parent: body });
+      }
     }
+    // Tie / Long Tie
     if (L.accessory === 'tie' || L.accessory === 'long-tie' || L.tie_color) {
       const tieCol = L.tie_color || accent;
-      const ln = L.accessory === 'long-tie' ? 0.34 : 0.19;
-      mesh(G.box, tieCol, { p: [0, 0.7 - ln / 2, front + 0.012], s: [0.052, ln, 0.015], parent: body });
-      mesh(G.cone, tieCol, { p: [0, 0.68 - ln, front + 0.012], s: [0.042, 0.065, 0.015], r: [Math.PI, 0, 0], parent: body });
+      const ln = L.accessory === 'long-tie' ? 0.36 : 0.24;
+      mesh(G.sphereLo, tieCol, { p: [0, 1.155, frontZ + 0.012], s: [0.022, 0.02, 0.016], parent: body });
+      mesh(G.box, tieCol, { p: [0, 1.14 - ln / 2, frontZ + 0.010], s: [0.04, ln, 0.012], parent: body });
+      mesh(G.cone, tieCol, { p: [0, 1.13 - ln, frontZ + 0.010], s: [0.03, 0.05, 0.012], r: [Math.PI, 0, 0], parent: body });
     }
-    if (L.accessory === 'x-logo') [-1, 1].forEach((s) => mesh(G.box, accent, { p: [0, 0.53, front + 0.006], s: [0.02, 0.14, 0.01], r: [0, 0, 0.6 * s], parent: body }));
-    if (L.accessory === 'camera') mesh(G.box, accent, { p: [-0.03, 0.54, front + 0.004], s: [0.035, 0.36, 0.01], r: [0, 0, 0.55], parent: body });
-    // arms (sleeves in outfit colour, skin hands — children[1] is the hand for paddles)
-    this.arms = [-1, 1].map((s) => {
-      const p = new THREE.Group(); p.position.set(0.22 * s * chub, 0.66, 0); body.add(p);
-      mesh(G.arm, main, { p: [0, -0.11, 0], cast: true, parent: p });
-      mesh(G.sphere, skin, { p: [0, -0.23, 0], s: 0.072, parent: p });
-      return p;
+    // X-logo on chest (Musk)
+    if (L.accessory === 'x-logo') {
+      [-1, 1].forEach((side) => mesh(G.box, accent, { p: [0, 1.045, frontZ + 0.01], s: [0.014, 0.10, 0.008], r: [0, 0, 0.6 * side], parent: body }));
+    }
+    // Camera strap (Fengge)
+    if (L.accessory === 'camera') {
+      mesh(G.box, accent, { p: [-0.02, 1.01, frontZ + 0.01], s: [0.024, 0.36, 0.012], r: [0.08, 0, 0.56], parent: body });
+    }
+
+    // Chest Photo Nameplate Badge (conference speaker badge on left chest)
+    const personaId = role?.persona_id || L.id || null;
+    const photoPath = resolvePhotoPath(personaId, role);
+    if (photoPath && opts.showBadge !== false) {
+      const bMat = getBadgeMaterial(photoPath);
+      if (bMat) {
+        const badgeG = new THREE.Group();
+        badgeG.position.set(0.098 * wScale, 1.07, frontZ + (belly > 1.12 ? 0.022 : 0.016));
+        badgeG.rotation.y = 0.22;
+        body.add(badgeG);
+        mesh(G.cyl, '#d4af37', { p: [0, 0, -0.003], s: [0.045, 0.006, 0.045], r: [Math.PI / 2, 0, 0], parent: badgeG });
+        mesh(G.disc, bMat, { p: [0, 0, 0.002], s: 0.041, parent: badgeG });
+      }
+    }
+
+    // 4. Arms (shoulder -> upper arm -> elbow -> forearm -> hand + thumb)
+    const wideSleeve = L.outfit === 'robe' && (L.accessory === 'scholar-hat' || L.hair_style === 'topknot');
+    this.arms = [-1, 1].map((side) => {
+      const sh = new THREE.Group();
+      sh.position.set((chestW + 0.035) * side, 1.13, 0);
+      body.add(sh);
+      const armR = 0.048 * (0.35 + 0.65 * wScale);
+      const sleeveCol = main;
+      const foreCol = shortSleeve ? skin : main;
+      mesh(G.sphereMid, sleeveCol, { s: armR * 1.15, cast: true, parent: sh });
+      mesh(G.limbCyl, sleeveCol, { p: [0, -0.11, 0], s: [armR, 0.21, armR], cast: true, parent: sh });
+      const elbow = new THREE.Group();
+      elbow.position.set(0, -0.22, 0);
+      elbow.rotation.x = -0.22;
+      sh.add(elbow);
+      mesh(G.sphereLo, foreCol, { s: armR * (wideSleeve ? 1.1 : 0.88), parent: elbow });
+      mesh(G.limbCyl, foreCol, { p: [0, -0.1, 0], s: [armR * (wideSleeve ? 1.38 : 0.84), 0.19, armR * (wideSleeve ? 1.38 : 0.84)], cast: true, parent: elbow });
+      // Hand palm + thumb
+      mesh(G.sphereMid, skin, { p: [0, -0.215, 0.005], s: [0.032, 0.046, 0.022], cast: true, parent: elbow });
+      mesh(G.sphereLo, skin, { p: [-0.024 * side, -0.205, 0.02], s: [0.013, 0.024, 0.013], r: [0.3, 0, 0.4 * side], parent: elbow });
+      return sh;
     });
-    const hand = (i) => this.arms[i];
+    const hand = (i) => this.arms[i].children[2]; // elbow group (hand is at y = -0.215 inside elbow)
     if (L.accessory === 'mic') {
       const g = hand(1);
-      mesh(G.cyl, '#1e1e22', { p: [0, -0.3, 0.04], s: [0.022, 0.14, 0.022], r: [0.3, 0, 0], parent: g });
-      mesh(G.sphereLo, '#71717a', { p: [0, -0.37, 0.06], s: 0.046, parent: g });
+      mesh(G.cyl, '#1e1e22', { p: [0, -0.25, 0.045], s: [0.018, 0.13, 0.018], r: [0.6, 0, 0], parent: g });
+      mesh(G.sphereMid, '#71717a', { p: [0, -0.2, 0.1], s: 0.036, parent: g });
     }
     if (L.accessory === 'camera') {
       const g = hand(0);
-      mesh(G.box, '#1f242c', { p: [0, -0.29, 0.05], s: [0.14, 0.09, 0.06], parent: g });
-      mesh(G.cyl, '#3b82f6', { p: [0, -0.29, 0.085], s: [0.032, 0.02, 0.032], r: [Math.PI / 2, 0, 0], parent: g });
-      mesh(G.sphereLo, '#ef4444', { p: [-0.045, -0.265, 0.08], s: 0.01, parent: g });
+      mesh(G.box, '#1b1f26', { p: [0, -0.24, 0.055], s: [0.125, 0.08, 0.055], parent: g });
+      mesh(G.cyl, '#38bdf8', { p: [0, -0.24, 0.088], s: [0.028, 0.02, 0.028], r: [Math.PI / 2, 0, 0], parent: g });
+      mesh(G.sphereLo, '#ef4444', { p: [-0.04, -0.215, 0.084], s: 0.009, parent: g });
     }
     if (L.accessory === 'book') {
       const g = hand(0);
-      mesh(G.box, accent, { p: [0, -0.29, 0.05], s: [0.14, 0.19, 0.038], parent: g });
-      mesh(G.box, '#fef3c7', { p: [0.01, -0.29, 0.05], s: [0.125, 0.17, 0.025], parent: g });
+      mesh(G.box, accent, { p: [0.01, -0.24, 0.055], s: [0.13, 0.17, 0.034], parent: g });
+      mesh(G.box, '#fef3c7', { p: [0.02, -0.24, 0.055], s: [0.115, 0.155, 0.024], parent: g });
     }
     if (L.accessory === 'bongo') {
       const g = hand(0);
-      mesh(G.cyl, '#9c5221', { p: [0.08, -0.28, 0.06], s: [0.075, 0.13, 0.075], parent: g });
-      mesh(G.cyl, '#f0dfc2', { p: [0.08, -0.215, 0.06], s: [0.072, 0.012, 0.072], parent: g });
-      mesh(G.cyl, '#844218', { p: [0.19, -0.29, 0.04], s: [0.062, 0.11, 0.062], parent: g });
-      mesh(G.cyl, '#f0dfc2', { p: [0.19, -0.235, 0.04], s: [0.06, 0.012, 0.06], parent: g });
+      mesh(G.cyl, '#9c5221', { p: [0.07, -0.24, 0.06], s: [0.065, 0.12, 0.065], parent: g });
+      mesh(G.cyl, '#f0dfc2', { p: [0.07, -0.18, 0.06], s: [0.062, 0.012, 0.062], parent: g });
+      mesh(G.cyl, '#844218', { p: [0.17, -0.25, 0.045], s: [0.055, 0.105, 0.055], parent: g });
+      mesh(G.cyl, '#f0dfc2', { p: [0.17, -0.198, 0.045], s: [0.053, 0.012, 0.053], parent: g });
     }
-    // head
-    const headPivot = new THREE.Group(); headPivot.position.set(0, 0.76, 0); body.add(headPivot); this.headPivot = headPivot;
-    const head = new THREE.Group(); head.position.set(0, 0.32, 0); headPivot.add(head); this.head = head;
-    mesh(G.sphere, skin, { s: [HEAD_R.x, HEAD_R.y, HEAD_R.z], cast: true, recv: true, parent: head });
-    [-1, 1].forEach((s) => mesh(G.sphere, skin, { p: [0.36 * s, 0, -0.02], s: [0.04, 0.07, 0.05], parent: head }));
-    const ex = 0.12, ey = 0.02;
-    this.eyes = [-1, 1].map((s) => {
-      const g = new THREE.Group(); const x = ex * s; g.position.set(x, ey, onHead(x, ey) - 0.02); head.add(g);
-      mesh(G.sphere, '#ffffff', { s: [0.07, 0.082, 0.04], parent: g });
-      mesh(G.sphere, '#231c1a', { p: [0, -0.005, 0.03], s: [0.043, 0.053, 0.025], parent: g });
-      mesh(G.sphereLo, '#ffffff', { p: [0.015, 0.02, 0.05], s: 0.013, parent: g });
+    if (L.prop === 'iphone') {
+      const g = hand(1);
+      mesh(G.box, '#f4f4f6', { p: [0, -0.23, 0.045], s: [0.05, 0.092, 0.01], r: [-0.25, 0, 0], parent: g });
+      mesh(G.box, '#18181b', { p: [0, -0.23, 0.051], s: [0.042, 0.072, 0.002], r: [-0.25, 0, 0], parent: g });
+    }
+
+    // 5. Head & Face Geometry (1:4.7 proportion: head ~0.35m tall, centered at y = 1.48)
+    const headPivot = new THREE.Group();
+    headPivot.position.set(0, 1.24, stoop ? 0.035 : 0);
+    if (stoop) headPivot.rotation.x = -0.07;
+    body.add(headPivot);
+    this.headPivot = headPivot;
+
+    const head = new THREE.Group();
+    head.position.set(0, 0.24, 0);
+    headPivot.add(head);
+    this.head = head;
+
+    const F = L.face || {};
+    const fShape = F.shape || L.face_shape || 'oval';
+    const SHAPES = {
+      square:       { hx: 0.168, hy: 0.182, hz: 0.172, jx: 0.96, jy: -0.082, jz: 0.88, chinW: 0.78, chinY: -0.138 },
+      round:        { hx: 0.180, hy: 0.172, hz: 0.176, jx: 1.02, jy: -0.064, jz: 0.95, chinW: 0.70, chinY: -0.128 },
+      broad:        { hx: 0.182, hy: 0.184, hz: 0.176, jx: 0.98, jy: -0.075, jz: 0.92, chinW: 0.76, chinY: -0.138 },
+      long:         { hx: 0.136, hy: 0.204, hz: 0.164, jx: 0.66, jy: -0.098, jz: 0.76, chinW: 0.42, chinY: -0.158 },
+      gaunt:        { hx: 0.138, hy: 0.196, hz: 0.166, jx: 0.64, jy: -0.094, jz: 0.78, chinW: 0.40, chinY: -0.152 },
+      oval:         { hx: 0.155, hy: 0.188, hz: 0.168, jx: 0.78, jy: -0.084, jz: 0.82, chinW: 0.54, chinY: -0.142 },
+      'oval-round': { hx: 0.176, hy: 0.172, hz: 0.172, jx: 0.94, jy: -0.070, jz: 0.88, chinW: 0.66, chinY: -0.130 },
+    };
+    const fs = SHAPES[fShape] || SHAPES.oval;
+    const fLen = F.length || 1;
+    const fWid = F.width || 1;
+    const hx = fs.hx * fWid, hy = fs.hy * fLen, hz = fs.hz * (0.96 + 0.04 * fWid);
+    const jawW = fs.jx * (F.jaw || 1);
+    const hyK = hy / 0.185;
+    const onSculptHead = (x, y, k = 1) => {
+      const t = 1 - (x / hx) ** 2 - (y / hy) ** 2;
+      return hz * Math.sqrt(Math.max(0, t)) * k;
+    };
+    const headSkip = new Set();
+
+    // Skull + Jaw/Chin + Cheeks/Jowls + Ears
+    mesh(G.sphere, skin, { s: [hx, hy, hz], cast: true, recv: true, parent: head });
+    mesh(G.sphereMid, skin, { p: [0, fs.jy * fLen, 0.018], s: [hx * jawW, hy * 0.58, hz * fs.jz], cast: true, parent: head });
+    if (fShape === 'square' || fShape === 'broad' || (F.jaw || 1) >= 1.08) {
+      [-1, 1].forEach((side) => {
+        mesh(G.sphereLo, skin, { p: [hx * jawW * 0.62 * side, fs.jy * fLen - 0.032, hz * 0.24], s: [0.044 * (F.jaw || 1), 0.048, 0.052], parent: head });
+      });
+      mesh(G.box, skin, { p: [0, fs.chinY * fLen, hz * 0.40], s: [hx * fs.chinW * 0.72, 0.042, 0.056], parent: head });
+    } else if (fShape === 'long' || fShape === 'gaunt') {
+      mesh(G.sphereMid, skin, { p: [0, fs.chinY * fLen, hz * 0.34], s: [hx * fs.chinW, 0.048, 0.054], parent: head });
+    }
+    const cheeks = F.cheeks ?? 0;
+    if (cheeks > 0.15) {
+      [-1, 1].forEach((side) => {
+        mesh(G.sphereMid, skin, { p: [hx * 0.42 * side, -0.048, hz * 0.50], s: [0.046 + 0.014 * cheeks, 0.040 + 0.010 * cheeks, 0.044], parent: head });
+      });
+    } else if (cheeks < -0.1) {
+      [-1, 1].forEach((side) => {
+        mesh(G.sphereLo, skin, { p: [hx * 0.62 * side, -0.014, hz * 0.60], s: [0.034, 0.021, 0.028], parent: head });
+        mesh(G.sphereLo, skinSoftShadow, { p: [hx * 0.55 * side, -0.058, hz * 0.54], s: [0.028, 0.032, 0.015], parent: head });
+      });
+    }
+    const jowls = F.jowls ?? 0;
+    if (jowls > 0.1) {
+      [-1, 1].forEach((side) => {
+        mesh(G.sphereMid, skin, { p: [hx * 0.44 * side, -0.090 * fLen, hz * 0.46], s: [0.044 + 0.010 * jowls, 0.042, 0.044], parent: head });
+      });
+    }
+    [-1, 1].forEach((side) => {
+      mesh(G.sphereMid, skin, { p: [hx * 0.96 * side, -0.005, -0.012], s: [0.022, 0.046, 0.03], r: [0, -0.15 * side, -0.08 * side], parent: head });
+      mesh(G.sphereLo, skinShadow, { p: [hx * 0.99 * side, -0.005, -0.008], s: [0.01, 0.026, 0.016], parent: head });
+    });
+
+    // Sculpted 3D Eyes, Sockets, Brows, Nose, Mouth, Age Lines
+    const ex = hx * 0.37 * (F.eyeDist || 1), ey = 0.016;
+    const es = F.eyeSize || 1;
+    const deepSet = F.deepSet ?? 0;
+    const eyeTilt = F.eyeTilt || 0;
+    if (deepSet > 0.15) {
+      [-1, 1].forEach((side) => {
+        const x = ex * side;
+        mesh(G.sphereLo, skinSoftShadow, { p: [x, ey - 0.003, onSculptHead(x, ey) - 0.008], s: [0.036, 0.025, 0.015], parent: head });
+        mesh(G.sphereLo, skin, { p: [x * 0.92, ey + 0.025, onSculptHead(x, ey + 0.025) + 0.002 * deepSet], s: [0.050, 0.014, 0.016 + 0.008 * deepSet], parent: head });
+      });
+    }
+    const irisCol = ['musk', 'jobs', 'munger', 'trump', 'feynman', 'paulgraham', 'nietzsche', 'socrates'].includes(personaId) ? '#3b4e63' : '#231b17';
+    this.eyes = [-1, 1].map((side) => {
+      const g = new THREE.Group();
+      const x = ex * side, z = onSculptHead(x, ey);
+      g.position.set(x, ey, z - 0.007 - 0.005 * deepSet);
+      g.rotation.z = eyeTilt * side;
+      head.add(g);
+      mesh(G.sphereLo, '#ffffff', { s: [0.027 * (0.65 + 0.35 * es), 0.021 * es, 0.016], parent: g });
+      mesh(G.sphereLo, irisCol, { p: [0, -0.001, 0.011], s: [0.014 * (0.7 + 0.3 * es), 0.015 * es, 0.009], parent: g });
+      mesh(G.box, '#111111', { p: [0, -0.001, 0.016], s: [0.01 * (0.7 + 0.3 * es), 0.011 * es, 0.007], parent: g });
+      mesh(G.box, '#ffffff', { p: [0.005, 0.005 * es, 0.019], s: [0.005, 0.005, 0.004], parent: g });
+      const heavyLid = es < 0.88 || eyeTilt < -0.04 || deepSet > 0.5;
+      mesh(G.box, skinShadow, { p: [0, 0.015 * es, 0.004], s: [0.048, heavyLid ? 0.010 : 0.007, 0.016], r: [0, 0, -0.12 * side], parent: g });
       return g;
     });
-    const bald = L.hair_style === 'bald' || L.hair_style === 'bald-ring';
-    const browCol = bald ? (L.beard_color || hair) : hair;
-    this.browBase = 0.08;
-    this.brows = [-1, 1].map((s) => { const x = ex * s, y = ey + 0.11; return mesh(G.box, browCol, { p: [x, y, onHead(x, y) + 0.005], s: [0.08, 0.02, 0.02], r: [0, 0, 0.08 * s], parent: head }); });
-    [-1, 1].forEach((s) => { const x = 0.2 * s, y = -0.07; mesh(G.sphereLo, '#ff8f8f', { p: [x, y, onHead(x, y) - 0.01], s: [0.045, 0.025, 0.02], parent: head }); });
-    mesh(G.sphere, new THREE.Color(skin).offsetHSL(0, 0.05, -0.08), { p: [0, -0.035, onHead(0, -0.035) + 0.005], s: 0.028, parent: head });
-    const my = -0.12; const mouth = new THREE.Group(); mouth.position.set(0, my, onHead(0, my) - 0.005); head.add(mouth); this.mouth = mouth;
-    mesh(G.arc, '#5a2a22', { s: [0.045, 0.045, 0.045], r: [0, 0, Math.PI], parent: mouth });
-    // hair
-    const cap = (sy = 1, tilt = -0.42, col = hair, op = 1) => mesh(G.hemi, op < 1 ? toon(col, { transparent: true, opacity: op }) : col,
-      { p: [0, 0.015, -0.01], s: [HEAD_R.x + 0.02, (HEAD_R.y + 0.025) * sy, HEAD_R.z + 0.02], r: [tilt, 0, 0], cast: true, parent: head });
-    const st = L.hair_style;
-    if (st === 'short' || st === 'crew' || st === 'side' || st === 'swept' || st === 'topknot' || st === 'wavy' || st === 'wavy-short' || st === 'curly') cap();
-    if (st === 'short-thin') cap(0.84, -0.58);
-    if (st === 'buzz') cap(0.95, -0.42, hair, 0.75);
-    if (st === 'crew') mesh(G.box, hair, { p: [0, 0.34, 0.02], s: [0.43, 0.085, 0.35], cast: true, parent: head });
-    if (st === 'side') {
-      mesh(G.sphere, hair, { p: [-0.11, 0.27, 0.13], s: [0.22, 0.09, 0.18], r: [0, 0, 0.28], parent: head });
-      mesh(G.sphere, hair, { p: [0.15, 0.25, 0.1], s: [0.14, 0.06, 0.14], r: [0, 0, -0.2], parent: head });
+    const bald = L.hair_style === 'bald' || L.hair_style === 'bald-ring' || L.hair_style === 'bald-curly-ring' || L.hair_style === 'bald-sparse' || L.hair_style === 'balding-fringe';
+    const browCol = L.brow_color || (bald ? (L.beard_color || hair) : hair);
+    const bushyBrow = ['socrates', 'munger', 'trump', 'zhangxuefeng', 'luxun', 'confucius', 'nietzsche'].includes(personaId);
+    const bThick = F.browThick || (bushyBrow ? 1.4 : 1.0);
+    const bWidth = F.browWidth || 1.0;
+    this.browBase = F.browAngle ?? (personaId === 'confucius' ? 0.14 : personaId === 'luxun' ? 0.12 : 0.05);
+    this.brows = [-1, 1].map((side) => {
+      const x = ex * side, y = ey + 0.036;
+      const br = mesh(G.box, browCol, { p: [x, y, onSculptHead(x, y) + 0.007 + 0.009 * deepSet], s: [0.048 * bWidth, 0.010 * bThick, 0.015], r: [0, 0, this.browBase * side], parent: head });
+      headSkip.add(br);
+      return br;
+    });
+    // Nose bridge + tip + wings (snub / aquiline / broad / button / straight)
+    const nStyle = F.noseStyle || L.nose_style || 'straight';
+    const ns = F.noseSize || 1;
+    const nl = F.noseLen || 1;
+    const nTilt = nStyle === 'aquiline' ? -0.30 : nStyle === 'snub' ? -0.18 : -0.25;
+    const bridgeW = (nStyle === 'snub' ? 0.018 : nStyle === 'broad' ? 0.016 : 0.0125) * ns;
+    const bridgeL = (nStyle === 'snub' ? 0.036 : nStyle === 'button' ? 0.044 : 0.055) * nl;
+    mesh(G.limbCyl, skinShadow, { p: [0, -0.008, onSculptHead(0, -0.008) + 0.008], s: [bridgeW, bridgeL, 0.017 * (0.7 + 0.3 * ns)], r: [nTilt, 0, 0], parent: head });
+    const tipY = -0.008 - bridgeL * 0.48;
+    const tipZ = onSculptHead(0, tipY) + 0.015 + (nStyle === 'aquiline' ? 0.004 : 0);
+    mesh(G.sphereLo, skinShadow, { p: [0, tipY, tipZ], s: [(nStyle === 'snub' ? 0.022 : 0.015) * ns, 0.013 * (nStyle === 'snub' ? 1.15 : 1), (nStyle === 'snub' ? 0.019 : 0.016) * (0.7 + 0.3 * ns)], parent: head });
+    if (nStyle === 'snub' || nStyle === 'broad') {
+      [-1, 1].forEach((side) => mesh(G.sphereLo, skinShadow, { p: [0.015 * ns * side, tipY - 0.002, tipZ - 0.004], s: [0.010 * ns, 0.009, 0.010], parent: head }));
     }
-    if (st === 'swept') mesh(G.sphere, hair, { p: [0, 0.31, -0.05], s: [0.34, 0.14, 0.32], r: [-0.35, 0, 0], cast: true, parent: head });
-    if (st === 'wavy') {
-      // Swept-back 1950s wavy top (Feynman — distinct from wild Einstein halo)
-      [[-0.14, 0.31, 0.08], [0, 0.33, 0.05], [0.15, 0.3, 0.08], [-0.22, 0.25, -0.04], [0.22, 0.25, -0.04], [0, 0.27, -0.14]].forEach(([x, y, z]) =>
-        mesh(G.sphereLo, hair, { p: [x, y, z], s: [0.13, 0.095, 0.13], parent: head }));
+    // Mouth (lips + expression)
+    const my = -0.088 * (0.94 + 0.06 * fLen);
+    const mw = F.mouthW || 1;
+    const mExpr = F.mouthExpr || ((personaId === 'trump' || personaId === 'paulgraham' || personaId === 'feynman') ? 'grin' : 'neutral');
+    const mouth = new THREE.Group();
+    mouth.position.set(0, my, onSculptHead(0, my) + 0.002);
+    head.add(mouth);
+    this.mouth = mouth;
+    if (mExpr === 'grin') {
+      mesh(G.sphereLo, '#ffffff', { p: [0, 0, 0.003], s: [0.034 * mw, 0.013, 0.008], parent: mouth });
+      mesh(G.arc, lipCol, { p: [0, 0.006, 0.004], s: [0.036 * mw, 0.022, 0.02], r: [0, 0, Math.PI], parent: mouth });
+    } else if (mExpr === 'open-smile') {
+      mesh(G.sphereLo, '#4a1c19', { p: [0, -0.001, 0.002], s: [0.028 * mw, 0.014, 0.007], parent: mouth });
+      mesh(G.box, '#ffffff', { p: [0, 0.004, 0.005], s: [0.032 * mw, 0.007, 0.005], parent: mouth });
+      mesh(G.arc, lipCol, { p: [0, 0.005, 0.005], s: [0.032 * mw, 0.020, 0.018], r: [0, 0, Math.PI], parent: mouth });
+    } else if (mExpr === 'smile') {
+      mesh(G.arc, lipCol, { p: [0, 0.007, 0.004], s: [0.030 * mw, 0.017, 0.016], r: [0, 0, Math.PI], parent: mouth });
+      mesh(G.box, lipCol, { p: [0, 0.004, 0.003], s: [0.042 * mw, 0.005, 0.010], parent: mouth });
+    } else if (mExpr === 'smirk') {
+      mesh(G.box, lipCol, { p: [0, 0.002, 0.003], s: [0.044 * mw, 0.007, 0.011], r: [0, 0, 0.07], parent: mouth });
+      mesh(G.sphereLo, lipCol, { p: [0.002, -0.004, 0.004], s: [0.022 * mw, 0.006, 0.009], parent: mouth });
+    } else {
+      mesh(G.box, lipCol, { p: [0, 0.003, 0.003], s: [0.046 * mw, 0.008, 0.012], parent: mouth });
+      mesh(G.sphereLo, lipCol, { p: [0, -0.004, 0.004], s: [0.024 * mw, 0.007, 0.01], parent: mouth });
     }
-    if (st === 'wavy-short') {
-      [[-0.12, 0.29, 0.1], [0.02, 0.31, 0.09], [0.16, 0.28, 0.08]].forEach(([x, y, z]) =>
-        mesh(G.sphereLo, hair, { p: [x, y, z], s: [0.12, 0.08, 0.12], parent: head }));
-    }
-    if (st === 'curly') {
-      // Fluffy messy curly hair crown (Fengge)
-      for (let i = 0; i < 12; i++) {
-        const a = (i / 12) * Math.PI * 2;
-        mesh(G.sphereLo, hair, { p: [Math.cos(a) * 0.27, 0.26 + (i % 3) * 0.045, Math.sin(a) * 0.25 - 0.02], s: 0.115, cast: true, parent: head });
+    // Age lines / nasolabial folds & forehead creases
+    const ageLines = F.ageLines || 0;
+    if (ageLines > 0.2) {
+      [-1, 1].forEach((side) => {
+        const ax = 0.038 * fWid * side, ay = -0.062 * fLen;
+        mesh(G.box, skinShadow, { p: [ax, ay, onSculptHead(ax, ay) + 0.002], s: [0.0045, 0.038, 0.006], r: [0.16, 0, -0.36 * side], parent: head });
+      });
+      if (ageLines >= 0.6) {
+        [0.088, 0.106].forEach((fy) => {
+          const y = fy * fLen;
+          mesh(G.box, skinShadow, { p: [0, y, onSculptHead(0, y) + 0.001], s: [hx * 0.54, 0.0035, 0.005], parent: head });
+        });
       }
-      mesh(G.sphereLo, hair, { p: [0, 0.37, 0], s: [0.24, 0.12, 0.24], cast: true, parent: head });
     }
-    if (st === 'swoop') {
-      cap(1.05);
-      mesh(G.sphere, hair, { p: [0.05, 0.3, 0.17], s: [0.39, 0.125, 0.23], r: [0.36, 0.12, -0.12], cast: true, parent: head });
-      mesh(G.sphere, hair, { p: [-0.24, 0.18, 0.02], s: [0.14, 0.14, 0.22], parent: head });
-      mesh(G.sphere, hair, { p: [0.24, 0.18, 0.02], s: [0.14, 0.14, 0.22], parent: head });
-      mesh(G.sphere, hair, { p: [0, 0.2, -0.2], s: [0.35, 0.17, 0.19], parent: head });
+
+    // Optional Photo Face Decal (opt-in via opts.faceDecal === true; default uses cohesive 3D face + photo chest badge)
+    if (opts.faceDecal === true && photoPath && L.face_crop) {
+      const fMat = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: gradTex, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+      const fPatch = mesh(G.faceCap, fMat, { p: [0, 0.002, 0.003], s: [hx * 1.015, hy * 1.015, hz * 1.015], parent: head });
+      fPatch.renderOrder = 2;
+      headSkip.add(fPatch);
+      const decalTex = getFaceDecalTexture(photoPath, L.face_crop, skin, (tex) => {
+        fMat.map = tex;
+        fMat.opacity = 0.94;
+        fMat.needsUpdate = true;
+        for (const e of this.eyes) e.visible = false;
+        for (const br of this.brows) br.visible = false;
+        this.mouth.visible = false;
+      });
+      if (decalTex) fMat.map = decalTex;
     }
-    if (st === 'bald-ring') {
-      mesh(G.torus, hair, { p: [0, -0.02, -0.04], s: [0.355, 0.31, 0.58], r: [Math.PI / 2 + 0.25, 0, 0], parent: head });
-      [-1, 1].forEach((s) => mesh(G.sphereLo, hair, { p: [0.34 * s, 0.04, -0.05], s: [0.06, 0.1, 0.11], parent: head }));
+
+    // 6. Dedicated 3D Hairstyles (no shared generic helmet!)
+    const st = L.hair_style || 'short';
+    const sideBackCrown = (col, h = 1.03, zOff = -0.022) => {
+      mesh(G.sphere, col, { p: [0, 0.03, zOff], s: [hx * 1.04, hy * h, hz * 1.03], cast: true, parent: head });
+    };
+    if (st === 'musk-swept') {
+      mesh(G.sphere, hair, { p: [0, 0.055 * hyK, -0.035], s: [hx * 1.03, hy * 0.92, hz * 0.98], cast: true, parent: head });
+      mesh(G.sphereMid, hair, { p: [-0.02, 0.165 * hyK, 0.02], s: [hx * 0.86, 0.055, hz * 0.78], r: [-0.18, 0.12, 0.08], cast: true, parent: head });
+      mesh(G.sphereMid, hair, { p: [0.05, 0.15 * hyK, 0.03], s: [hx * 0.52, 0.048, hz * 0.65], r: [-0.1, -0.1, -0.18], parent: head });
+      [-1, 1].forEach((side) => mesh(G.box, hair, { p: [hx * 0.92 * side, 0.04, -0.01], s: [0.03, 0.095, 0.09], parent: head }));
+    } else if (st === 'bald-curly-ring' || st === 'bald-ring') {
+      // Exposed bald dome + curly white hair ring ONLY around sides & back (z <= 0)
+      for (let i = 0; i < 9; i++) {
+        const a = -Math.PI * 0.68 + (i / 8) * Math.PI * 1.36; // a=0 is BACK (-z), ±0.68π is temples
+        mesh(G.sphereLo, hair, {
+          p: [Math.sin(a) * hx * 0.98, 0.015 + Math.cos(a) * -0.01, -Math.cos(a) * hz * 0.95],
+          s: [0.045, 0.052, 0.045], cast: true, parent: head
+        });
+      }
+      mesh(G.sphereMid, hair, { p: [0, 0.02, -hz * 0.55], s: [hx * 0.96, hy * 0.58, hz * 0.52], parent: head });
+    } else if (st === 'textured-crop' || st === 'short') {
+      // Zhang Xuefeng: full short textured black crop brushed slightly up in front
+      sideBackCrown(hair, 0.96, -0.025);
+      mesh(G.sphereMid, hair, { p: [0, 0.158 * hyK, 0.015], s: [hx * 0.88, 0.055, hz * 0.76], r: [0.15, 0, 0], cast: true, parent: head });
+      [-1, 0, 1].forEach((i) => mesh(G.box, hair, { p: [i * 0.04, 0.185 * hyK, 0.035], s: [0.048, 0.032, 0.055], r: [0.22, 0, -i * 0.14], parent: head }));
+      [-1, 1].forEach((side) => mesh(G.box, hair, { p: [hx * 0.92 * side, 0.03, -0.015], s: [0.026, 0.085, 0.08], parent: head }));
+    } else if (st === 'shaggy-curly' || st === 'curly') {
+      sideBackCrown(hair, 1.0, -0.02);
+      const pts = [
+        [-0.17, 0.1, 0.02], [0.17, 0.1, 0.02], [-0.19, 0.02, -0.02], [0.19, 0.02, -0.02],
+        [-0.18, -0.06, -0.04], [0.18, -0.06, -0.04], [-0.11, 0.18, 0.04], [0.11, 0.18, 0.04],
+        [0, 0.19, 0.01], [-0.13, 0.15, -0.09], [0.13, 0.15, -0.09], [0, 0.12, -0.16],
+        [-0.08, 0.14, 0.09], [0.07, 0.15, 0.08]
+      ];
+      pts.forEach(([x, y, z], idx) => mesh(G.sphereLo, hair, { p: [x * (hx / 0.17), y * hyK, z], s: 0.056 + (idx % 3) * 0.01, cast: true, parent: head }));
+    } else if (st === 'balding-fringe' || st === 'short-thin') {
+      // Jobs: high receding forehead + very close-cropped grey-brown hair on back, sides, and high crown
+      mesh(G.sphere, hair, { p: [0, 0.035 * hyK, -0.048], s: [hx * 0.97, hy * 0.86, hz * 0.80], parent: head });
+      mesh(G.sphereMid, hair, { p: [0, 0.135 * hyK, -0.038], s: [hx * 0.72, 0.052, hz * 0.62], parent: head });
+      [-1, 1].forEach((side) => mesh(G.box, hair, { p: [hx * 0.92 * side, 0.035, -0.03], s: [0.02, 0.085, 0.075], parent: head }));
+    } else if (st === 'bald-sparse') {
+      // Elderly dome + side tufts + thin silver combover strands
+      [-1, 1].forEach((side) => mesh(G.sphereMid, hair, { p: [hx * 0.9 * side, 0.02, -0.04], s: [0.032, 0.058, 0.075], parent: head }));
+      mesh(G.sphere, hair, { p: [0, 0.02, -0.09], s: [hx * 0.88, hy * 0.65, hz * 0.6], parent: head });
+      [-0.03, 0.02].forEach((z, idx) => mesh(G.box, hair, { p: [0, (0.178 - idx * 0.008) * hyK, z], s: [hx * 1.1, 0.012, 0.022], r: [0, 0, -0.08], parent: head }));
+    } else if (st === 'wavy-50s' || st === 'wavy') {
+      sideBackCrown(hair, 0.98, -0.025);
+      mesh(G.sphereMid, hair, { p: [-0.05, 0.165 * hyK, 0.04], s: [0.125, 0.052, 0.105], r: [0.15, 0.2, 0.25], cast: true, parent: head });
+      mesh(G.sphereMid, hair, { p: [0.08, 0.155 * hyK, 0.03], s: [0.095, 0.044, 0.095], r: [0.1, -0.15, -0.2], parent: head });
+      [-1, 1].forEach((side) => mesh(G.sphereLo, hair, { p: [hx * 0.9 * side, 0.05, -0.02], s: [0.036, 0.07, 0.07], parent: head }));
+    } else if (st === 'trump-swoop' || st === 'swoop') {
+      sideBackCrown(hair, 1.02, -0.02);
+      mesh(G.sphere, hair, { p: [0.02, 0.175 * hyK, 0.075], s: [hx * 1.08, 0.068, hz * 0.78], r: [0.28, 0.15, -0.1], cast: true, parent: head });
+      mesh(G.sphereMid, hair, { p: [-0.07, 0.15 * hyK, 0.09], s: [0.095, 0.048, 0.08], r: [0.2, 0, 0.25], parent: head });
+      [-1, 1].forEach((side) => mesh(G.sphereMid, hair, { p: [hx * 0.88 * side, 0.04, -0.01], s: [0.052, 0.085, 0.115], r: [0, 0, -0.15 * side], parent: head }));
+      mesh(G.sphereMid, hair, { p: [0, 0.02, -hz * 0.88], s: [hx * 0.92, 0.11, 0.06], parent: head });
+    } else if (st === 'bald') {
+      [-1, 1].forEach((side) => mesh(G.box, hair, { p: [hx * 0.94 * side, 0.02, -0.015], s: [0.016, 0.055, 0.05], parent: head }));
+    } else if (st === 'curly-saltpepper' || st === 'wavy-short') {
+      const alt = '#9ca3af';
+      mesh(G.sphere, hair, { p: [0, 0.06 * hyK, -0.035], s: [hx * 0.96, hy * 0.82, hz * 0.92], parent: head });
+      [
+        [-0.09, 0.16, 0.05], [0, 0.175, 0.04], [0.09, 0.16, 0.05], [-0.13, 0.11, -0.02], [0.13, 0.11, -0.02],
+        [-0.06, 0.17, -0.06], [0.06, 0.17, -0.06], [0, 0.14, -0.12], [-0.14, 0.04, -0.03], [0.14, 0.04, -0.03]
+      ].forEach(([x, y, z], idx) => mesh(G.sphereLo, idx % 3 === 0 ? alt : hair, { p: [x * (hx / 0.15), y * hyK, z], s: 0.048, cast: true, parent: head }));
+    } else if (st === 'neat-side' || st === 'side') {
+      sideBackCrown(hair, 0.95, -0.022);
+      mesh(G.sphereMid, hair, { p: [-0.045, 0.152 * hyK, 0.045], s: [0.105, 0.038, 0.095], r: [0.18, 0, 0.22], parent: head });
+      mesh(G.sphereMid, hair, { p: [0.075, 0.142 * hyK, 0.04], s: [0.075, 0.032, 0.085], r: [0.18, 0, -0.22], parent: head });
+      mesh(G.box, skin, { p: [0.035, 0.175 * hyK, 0.05], s: [0.007, 0.015, 0.07], parent: head });
+    } else if (st === 'luxun-crew' || st === 'crew') {
+      mesh(G.sphere, hair, { p: [0, 0.045 * hyK, -0.04], s: [hx * 0.95, hy * 0.85, hz * 0.88], parent: head });
+      mesh(G.box, hair, { p: [0, 0.175 * hyK, 0.005], s: [hx * 1.48, 0.085, hz * 1.38], cast: true, parent: head });
+      mesh(G.box, hair, { p: [0, 0.13 * hyK, -0.08], s: [hx * 1.42, 0.12, 0.08], parent: head });
+    } else if (st === 'nietzsche-swept' || st === 'swept') {
+      mesh(G.sphere, hair, { p: [0, 0.055 * hyK, -0.045], s: [hx * 1.04, hy * 0.94, hz * 1.02], cast: true, parent: head });
+      mesh(G.sphereMid, hair, { p: [0, 0.165 * hyK, -0.03], s: [hx * 0.95, 0.068, hz * 0.95], r: [-0.32, 0, 0], cast: true, parent: head });
+      [-1, 1].forEach((side) => mesh(G.sphereMid, hair, { p: [hx * 0.88 * side, 0.05, -0.035], s: [0.045, 0.095, 0.095], parent: head }));
+    } else if (st === 'topknot') {
+      sideBackCrown(hair, 0.94, -0.025);
+      mesh(G.sphereMid, hair, { p: [0, 0.21 * hyK, -0.02], s: 0.058, cast: true, parent: head });
+    } else if (st === 'receding-side') {
+      mesh(G.sphere, hair, { p: [0, 0.048 * hyK, -0.04], s: [hx * 0.98, hy * 0.88, hz * 0.92], parent: head });
+      mesh(G.sphereMid, hair, { p: [0.015, 0.168 * hyK, 0.008], s: [hx * 0.78, 0.052, hz * 0.72], r: [0.08, 0, -0.14], cast: true, parent: head });
+      [-1, 1].forEach((side) => mesh(G.box, hair, { p: [hx * 0.92 * side, 0.025, -0.02], s: [0.024, 0.08, 0.075], parent: head }));
+    } else if (st === 'short-spiky') {
+      // Zhang Yiming: fluffy slightly-spiky short hair with high forehead
+      mesh(G.sphere, hair, { p: [0, 0.06 * hyK, -0.032], s: [hx * 0.98, hy * 0.86, hz * 0.92], parent: head });
+      [[-0.06, 0.175, 0.02], [0, 0.186, 0.025], [0.06, 0.175, 0.02], [-0.04, 0.178, -0.03], [0.04, 0.178, -0.03]].forEach(([x, y, z]) =>
+        mesh(G.sphereLo, hair, { p: [x * (hx / 0.17), y * hyK, z], s: [0.048, 0.036, 0.048], cast: true, parent: head }));
     }
-    if (st === 'topknot') mesh(G.sphere, hair, { p: [0, 0.4, -0.02], s: 0.1, cast: true, parent: head });
+
+    // Scholar-hat (Confucius dark blue cloth cap with long side ribbons)
     if (L.accessory === 'scholar-hat') {
-      mesh(G.box, accent, { p: [0, 0.45, -0.02], s: [0.18, 0.14, 0.22], cast: true, parent: head });
-      mesh(G.box, accent, { p: [0, 0.38, -0.02], s: [0.38, 0.035, 0.13], parent: head });
-      [-1, 1].forEach((s) => mesh(G.box, accent, { p: [0.14 * s, 0.22, -0.26], s: [0.03, 0.22, 0.02], r: [0.18, 0, 0.15 * s], parent: head }));
+      mesh(G.box, accent, { p: [0, 0.225 * hyK, -0.015], s: [0.125, 0.072, 0.145], r: [-0.08, 0, 0], cast: true, parent: head });
+      mesh(G.box, accent, { p: [0, 0.19 * hyK, -0.01], s: [0.22, 0.028, 0.08], parent: head });
+      [-1, 1].forEach((side) => {
+        mesh(G.box, accent, { p: [0.115 * side, 0.08, -0.13], s: [0.026, 0.18, 0.016], r: [0.15, 0, 0.12 * side], parent: head });
+        mesh(G.box, accent, { p: [0.135 * side, -0.18, 0.04], s: [0.022, 0.24, 0.012], r: [-0.1, 0, -0.06 * side], parent: head });
+      });
     }
-    // beard / moustache
-    const bc = L.beard_color || hair;
+
+    // 7. Facial Hair / Beards
     if (L.beard === 'full') {
-      mesh(G.sphere, bc, { p: [0, -0.21, 0.13], s: [0.31, 0.28, 0.25], cast: true, parent: head });
-      [-1, 1].forEach((s) => mesh(G.sphere, bc, { p: [0.1 * s, -0.09, onHead(0.06, -0.08) + 0.02], s: [0.09, 0.045, 0.045], r: [0, 0, 0.35 * s], parent: head }));
-      mouth.position.z += 0.06;
+      [[-0.07, -0.12, 0.11], [0.07, -0.12, 0.11], [-0.04, -0.175, 0.105], [0.04, -0.175, 0.105], [0, -0.2, 0.11], [0, -0.135, 0.125]].forEach(([x, y, z]) =>
+        mesh(G.sphereLo, bc, { p: [x, y, z], s: [0.068, 0.065, 0.06], cast: true, parent: head }));
+      [-1, 1].forEach((side) => mesh(G.sphereLo, bc, { p: [0.048 * side, -0.068, onSculptHead(0.04, -0.068) + 0.016], s: [0.056, 0.028, 0.028], r: [0, 0, 0.35 * side], parent: head }));
+    } else if (L.beard === 'long') {
+      mesh(G.cone, bc, { p: [0, -0.26, 0.115], s: [0.105, 0.29, 0.055], r: [Math.PI, 0, 0], cast: true, parent: head });
+      mesh(G.sphereLo, bc, { p: [0, -0.12, 0.12], s: [0.115, 0.055, 0.06], parent: head });
+      [-1, 1].forEach((side) => {
+        mesh(G.sphereLo, bc, { p: [0.05 * side, -0.068, onSculptHead(0.04, -0.068) + 0.018], s: [0.055, 0.024, 0.024], r: [0, 0, 0.42 * side], parent: head });
+        mesh(G.cone, bc, { p: [0.095 * side, -0.17, 0.105], s: [0.03, 0.16, 0.028], r: [Math.PI, 0, -0.14 * side], parent: head });
+      });
+    } else if (L.beard === 'short') {
+      mesh(G.sphereMid, bc, { p: [0, -0.115, 0.065], s: [hx * 0.88, 0.085, hz * 0.82], parent: head });
+      [-1, 1].forEach((side) => mesh(G.sphereLo, '#363230', { p: [0.036 * side, -0.066, onSculptHead(0.035, -0.066) + 0.012], s: [0.042, 0.016, 0.018], r: [0, 0, 0.2 * side], parent: head }));
+    } else if (L.beard === 'goatee') {
+      mesh(G.cone, bc, { p: [0, -0.145, 0.115], s: [0.055, 0.095, 0.045], r: [Math.PI, 0, 0], cast: true, parent: head });
+      [-1, 1].forEach((side) => mesh(G.box, bc, { p: [0.028 * side, -0.065, onSculptHead(0.028, -0.065) + 0.014], s: [0.048, 0.018, 0.018], r: [0, 0, 0.18 * side], parent: head }));
+    } else if (L.beard === 'stubble') {
+      // Jobs: fitted grey-white jaw/chin beard + subtle mustache around mouth
+      mesh(G.sphereMid, bc, { p: [0, -0.128, 0.052], s: [hx * 0.74, 0.058, hz * 0.72], parent: head });
+      [-1, 1].forEach((side) => mesh(G.box, bc, { p: [0.025 * side, -0.068, onSculptHead(0.025, -0.068) + 0.008], s: [0.038, 0.011, 0.01], r: [0, 0, 0.15 * side], parent: head }));
+    } else if (L.beard === 'light-stubble') {
+      mesh(G.sphereMid, toon(bc, { transparent: true, opacity: 0.18 }), { p: [0, -0.095, 0.036], s: [hx * 0.94, 0.09, hz * 0.88], parent: head });
+    } else if (L.beard === 'mustache') {
+      [-1, 1].forEach((side) => mesh(G.box, bc, { p: [0.032 * side, -0.058, onSculptHead(0.028, -0.058) + 0.016], s: [0.058, 0.022, 0.022], r: [0, 0, 0.12 * side], parent: head }));
+    } else if (L.beard === 'walrus') {
+      [-1, 1].forEach((side) => mesh(G.sphereMid, bc, { p: [0.044 * side, -0.082, onSculptHead(0.03, -0.068) + 0.024], s: [0.072, 0.048, 0.042], r: [0, 0, 0.45 * side], cast: true, parent: head }));
+      mesh(G.sphereMid, bc, { p: [0, -0.07, onSculptHead(0, -0.07) + 0.028], s: [0.045, 0.032, 0.03], parent: head });
     }
-    if (L.beard === 'long') {
-      mesh(G.cone, bc, { p: [0, -0.38, 0.18], s: [0.16, 0.42, 0.09], r: [Math.PI, 0, 0], cast: true, parent: head });
-      mesh(G.sphere, bc, { p: [0, -0.16, 0.2], s: [0.19, 0.095, 0.1], parent: head });
-      [-1, 1].forEach((s) => mesh(G.cone, bc, { p: [0.14 * s, -0.2, 0.19], s: [0.045, 0.22, 0.04], r: [Math.PI, 0, -0.18 * s], parent: head }));
+    if (L.accessory === 'pipe') {
+      const pz = onSculptHead(0.04, my) + 0.02;
+      mesh(G.cyl, '#5a3a22', { p: [0.052, my - 0.01, pz + 0.03], s: [0.007, 0.085, 0.007], r: [Math.PI / 2, 0, 0.3], parent: head });
+      mesh(G.cyl, '#4a2e18', { p: [0.08, my + 0.005, pz + 0.072], s: [0.018, 0.034, 0.018], parent: head });
     }
-    if (L.beard === 'short') {
-      mesh(G.sphere, bc, { p: [0, -0.18, 0.13], s: [0.28, 0.17, 0.21], parent: head });
-      [-1, 1].forEach((s) => mesh(G.sphere, bc, { p: [0.06 * s, -0.09, onHead(0.05, -0.08) + 0.014], s: [0.075, 0.028, 0.03], r: [0, 0, 0.22 * s], parent: head }));
-    }
-    if (L.beard === 'stubble') mesh(G.sphere, toon(bc, { transparent: true, opacity: 0.34 }), { p: [0, -0.15, 0.06], s: [0.33, 0.2, 0.3], parent: head });
-    if (L.beard === 'mustache') {
-      [-1, 1].forEach((s) => mesh(G.box, bc, { p: [0.055 * s, -0.075, onHead(0.04, -0.07) + 0.02], s: [0.11, 0.045, 0.04], r: [0, 0, 0.12 * s], parent: head }));
-    }
-    if (L.beard === 'walrus') {
-      [-1, 1].forEach((s) => mesh(G.sphere, bc, { p: [0.07 * s, -0.11, onHead(0.04, -0.08) + 0.025], s: [0.125, 0.075, 0.06], r: [0, 0, 0.48 * s], parent: head }));
-    }
-    if (L.accessory === 'pipe') { mesh(G.cyl, '#5a3a22', { p: [0.08, my - 0.02, onHead(0.08, my) + 0.05], s: [0.012, 0.12, 0.012], r: [Math.PI / 2, 0, 0.3], parent: head }); mesh(G.cyl, '#5a3a22', { p: [0.12, my - 0.0, onHead(0.08, my) + 0.12], s: [0.03, 0.05, 0.03], parent: head }); }
-    // glasses
+
+    // 8. Glasses (distinct rimless round / thick elderly / rect dark / rect-thin silver)
     if (L.glasses) {
       const thick = L.glasses === 'thick', round = L.glasses === 'round', thin = L.glasses === 'rect-thin';
-      const frame = round ? '#9aa0a6' : thin ? '#2c3542' : '#18181b';
-      [-1, 1].forEach((s) => { const x = ex * s, z = onHead(x, ey) + 0.035;
-        mesh(round ? G.torus : G.torusSq, frame, { p: [x, ey, z], s: [round ? 0.085 : 0.105, round ? 0.085 : 0.09, thick ? 0.13 : thin || round ? 0.04 : 0.07], r: [0, 0, round ? 0 : Math.PI / 4], parent: head }); });
-      mesh(G.box, frame, { p: [0, ey + 0.01, onHead(0, ey) + 0.035], s: [0.08, thin || round ? 0.01 : 0.016, 0.015], parent: head });
+      const frame = round ? '#64748b' : thin ? '#64748b' : thick ? '#231f20' : '#18181b';
+      const gz = onSculptHead(ex, ey) + 0.026;
+      const lensMat = toon('#e2e8f0', { transparent: true, opacity: 0.22 });
+      [-1, 1].forEach((side) => {
+        const x = ex * side;
+        if (round) {
+          mesh(G.torusThin, frame, { p: [x, ey, gz], s: [0.041, 0.041, 0.06], parent: head });
+          mesh(G.disc, lensMat, { p: [x, ey, gz - 0.002], s: 0.039, parent: head });
+        } else if (thin) {
+          mesh(G.box, frame, { p: [x, ey + 0.018, gz], s: [0.078, 0.005, 0.008], parent: head });
+          mesh(G.box, frame, { p: [x + 0.038 * side, ey + 0.003, gz], s: [0.004, 0.032, 0.008], parent: head });
+          mesh(G.box, lensMat, { p: [x, ey + 0.001, gz - 0.002], s: [0.074, 0.034, 0.003], parent: head });
+        } else {
+          const geo = thick ? G.torusSq : G.torusSqThin;
+          mesh(geo, frame, { p: [x, ey, gz], s: [thick ? 0.056 : 0.052, thick ? 0.046 : 0.036, thick ? 0.075 : 0.045], r: [0, 0, Math.PI / 4], parent: head });
+        }
+        mesh(G.box, frame, { p: [hx * 0.72 * side, ey + 0.006, gz - 0.075], s: [0.005, 0.006, 0.145], parent: head });
+      });
+      mesh(G.box, frame, { p: [0, ey + (thin ? 0.015 : 0.008), onSculptHead(0, ey) + 0.024], s: [0.042, thick ? 0.01 : 0.006, 0.008], parent: head });
     }
+
+    // Merge static meshes sharing materials on head & body to cut draw calls cleanly
+    mergeStaticGroup(head, headSkip);
+    mergeStaticGroup(body, bodySkip);
+
     this.propeller = null;
     this.headScale = 1;
+    this.sitYOffset = 0.42 - 0.74 * hScale;
+    this.topOffset = 1.72 * hScale + (L.accessory === 'scholar-hat' ? 0.08 : 0);
     this.R = R;
-    return { main: new THREE.Color(this.color), light };
+    return { main: new THREE.Color(this.color), light: mainLight };
   }
+}
+
+export function buildPersonaFigure(personaOrLook, sceneOrGroup, opts = {}) {
+  const L = personaOrLook.look || personaOrLook;
+  const role = personaOrLook.look ? { persona_id: personaOrLook.id, avatar: personaOrLook.avatar, name: personaOrLook.name, look: L } : null;
+  const b = new Bot(personaOrLook.id || 'preview', sceneOrGroup);
+  const res = b.buildPersona(L, role, opts);
+  return { bot: b, ...res };
 }
 
 // ---------------------------------------------------------------- Gemini judge: four-point sparkle above the head
@@ -602,9 +1222,13 @@ export function createStage(container, overlayRoot, opts = {}) {
   // ------------------------------------------------ layouts
   function clearWorld() {
     scene.remove(world);
-    world.traverse((o) => { if (o.geometry && !Object.values(G).includes(o.geometry)) o.geometry.dispose?.(); });
+    world.traverse((o) => { if (o.geometry && !G_SET.has(o.geometry)) o.geometry.dispose?.(); });
     world = new THREE.Group(); scene.add(world);
-    for (const b of bots.values()) { scene.remove(b.root); if (b.paddle) { scene.remove(b.paddle); b.paddle.material.dispose(); } }
+    for (const b of bots.values()) {
+      b.root.traverse((o) => { if (o.geometry && !G_SET.has(o.geometry)) o.geometry.dispose?.(); });
+      scene.remove(b.root);
+      if (b.paddle) { scene.remove(b.paddle); b.paddle.material.dispose(); }
+    }
     bots = new Map();
     overlayRoot.innerHTML = '';
     overlay = new Map();
@@ -782,10 +1406,17 @@ export function createStage(container, overlayRoot, opts = {}) {
   }
 
   // ------------------------------------------------ setup
+  let lastSetup = null;
   function setup({ mode, roles, seed }) {
-    const key = mode + '|' + seed + '|' + roles.map((r) => r.id + r.name).join(',');
+    const pVer = typeof window !== 'undefined' ? (window.__personas?.version || 0) : 0;
+    const key = mode + '|' + seed + '|' + pVer + '|' + roles.map((r) => r.id + r.name).join(',');
     if (key === sceneKey) return;
     sceneKey = key;
+    const curArgs = { mode, roles, seed };
+    lastSetup = curArgs;
+    if (typeof window !== 'undefined' && window.__personas?.loaded && !window.__personas.byId?.size) {
+      window.__personas.loaded.then(() => { if (lastSetup === curArgs && window.__personas?.byId?.size) setup(curArgs); });
+    }
     clearWorld();
     hemi.intensity = 1.1; sun.intensity = 1.75;
     const bodies = roles.filter((r) => mode !== 'debate' || r.side);
@@ -801,7 +1432,10 @@ export function createStage(container, overlayRoot, opts = {}) {
         if (r.side === 'judge') hue = 0.12;
         if (r.side === 'chair') hue = 0.33;
       }
-      const { main } = r.look ? b.buildPersona(r.look) : b.build(mulberry32(hashStr(seed + '#' + r.id)), hue);
+      const livePersona = r.persona_id && typeof window !== 'undefined' ? window.__personas?.byId?.get(r.persona_id) : null;
+      const look = livePersona?.look || r.look;
+      const roleCtx = livePersona ? { ...r, avatar: livePersona.avatar || r.avatar } : r;
+      const { main } = look ? b.buildPersona(look, roleCtx) : b.build(mulberry32(hashStr(seed + '#' + r.id)), hue);
       b.persona = r.persona_id || null;
       b.color = '#' + main.getHexString();
       b.name = r.name; b.side = r.side;
@@ -1077,12 +1711,13 @@ export function createStage(container, overlayRoot, opts = {}) {
     if (b.blinkIn <= 0) { b.blinkT = 0.13; b.blinkIn = Math.random() < 0.2 ? 0.25 : 1.8 + Math.random() * 3.5; }
     b.blinkT -= dt;
     for (const e of b.eyes) e.scale.y = b.blinkT > 0 ? 0.12 : 1;
-    const sitY = b.sit * 0.11;
+    const sitY = b.sit * (b.sitYOffset ?? 0.11);
     const bob = Math.abs(Math.sin(b.phase)) * 0.06 * b.walkAmt + bounce + Math.sin(now * 2.2 + b.id) * 0.008;
     b.root.position.set(b.pos.x, b.ground + sitY + bob, b.pos.y);
     b.root.rotation.y = b.facing;
     b.body.rotation.z = Math.sin(b.phase) * 0.09 * b.walkAmt;
     b.legs[0].rotation.x = c.legL; b.legs[1].rotation.x = c.legR;
+    if (b.knees) { b.knees[0].rotation.x = b.sit * 1.35; b.knees[1].rotation.x = b.sit * 1.35; }
     b.arms[0].rotation.set(c.aLx, 0, c.aLz); b.arms[1].rotation.set(c.aRx, 0, c.aRz);
     // head: always turn toward whoever is being looked at — including bots that already voted
     let look = null;
@@ -1110,11 +1745,11 @@ export function createStage(container, overlayRoot, opts = {}) {
       b.paddle.visible = true;
       // held up above the head, shifted toward the raised (right) hand in camera space → always readable
       const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
-      b.paddle.position.set(b.pos.x, b.ground + b.sit * 0.11 + 2.0 + Math.sin(now * 3 + b.id) * 0.04, b.pos.y).addScaledVector(right, 0.28);
+      b.paddle.position.set(b.pos.x, b.ground + sitY + (b.topOffset ?? 1.5) * b.root.scale.y + 0.5 + Math.sin(now * 3 + b.id) * 0.04, b.pos.y).addScaledVector(right, 0.28);
       const k = clamp((b.gBlend - 0.3) / 0.5, 0.05, 1);
       b.paddle.scale.set((IS_MOBILE ? 0.72 : 0.58) * k, (IS_MOBILE ? 0.9 : 0.72) * k, 1);
     } else if (b.paddle) b.paddle.visible = false;
-    b.headTopY = b.ground + sitY + 1.5 * b.root.scale.y;
+    b.headTopY = b.ground + sitY + (b.topOffset ?? 1.5) * b.root.scale.y;
   }
 
   // ------------------------------------------------ overlay (tags, think dots, bubbles with collision avoidance)
@@ -1259,7 +1894,38 @@ export function createStage(container, overlayRoot, opts = {}) {
     }
   }
   raf = requestAnimationFrame(tick);
-  window.__stage = { get bots() { return bots; }, get layout() { return layout; }, get frame() { return frame; } };
+  window.__stage = {
+    get bots() { return bots; }, get layout() { return layout; }, get frame() { return frame; },
+    get renderer() { return renderer; }, get camera() { return camera; }, get controls() { return controls; },
+    waitForTextures,
+    focusBot(id) {
+      const b = bots.get(id);
+      if (!b) return;
+      cam.userUntil = performance.now() / 1000 + 60;
+      controls.autoRotate = false;
+      controls.target.set(b.pos.x, b.ground + 1.05, b.pos.y);
+      camera.position.set(b.pos.x + 1.6, b.ground + 2.2, b.pos.y + 3.8);
+      controls.update();
+    },
+    frameBots() {
+      cam.userUntil = performance.now() / 1000 + 60;
+      controls.autoRotate = false;
+      if (layout?.mode === 'debate') {
+        const aspect = camera.aspect || 1;
+        if (aspect < 0.8) {
+          controls.target.set(0, 1.15, -1.2);
+          camera.position.set(0, 6.2, 18.5);
+        } else {
+          controls.target.set(0, 1.35, -1.2);
+          camera.position.set(0, 4.1, 10.6);
+        }
+      } else {
+        controls.target.set(0, 1.0, 0);
+        camera.position.set(0, 3.6, 8.2);
+      }
+      controls.update();
+    },
+  };
   const ro = new ResizeObserver(() => { fitCamera(); });
   ro.observe(container);
 

@@ -9,16 +9,39 @@
    "style_imitation": true,
    "avatar": "assets/avatars/photo/musk.jpg",
    "look": {
-    "skin": "#f2c9a6",
-    "hair": "#3b291e",
-    "hair_style": "side",
+    "skin": "#f1c4a5",
+    "hair": "#36251b",
+    "hair_style": "musk-swept",
+    "face_shape": "square",
+    "face": {
+     "shape": "square",
+     "width": 1.03,
+     "length": 1.02,
+     "jaw": 1.12,
+     "cheeks": 0.1,
+     "eyeDist": 0.98,
+     "eyeSize": 0.84,
+     "eyeTilt": 0.03,
+     "deepSet": 0.35,
+     "noseSize": 0.98,
+     "noseLen": 1.02,
+     "noseStyle": "straight",
+     "browThick": 1.0,
+     "browAngle": 0.02,
+     "mouthW": 0.96,
+     "mouthExpr": "smirk"
+    },
     "beard": null,
     "glasses": null,
-    "outfit": "tee",
-    "outfit_color": "#141418",
+    "outfit": "jacket",
+    "outfit_color": "#15171c",
+    "inner_color": "#101114",
     "accent": "#e2e4ea",
     "accessory": "x-logo",
-    "build": 1.08
+    "build": 1.12,
+    "neck_scale": 1.1,
+    "height": 1.07,
+    "face_crop": [0.48, 0.46, 0.19, 0.24]
    },
    "source": {
     "repo": "alchaincyf/elon-musk-skill",
@@ -31,11 +54,12 @@
    "avatar_credit": {
     "type": "photo",
     "source_url": "https://upload.wikimedia.org/wikipedia/commons/3/34/Elon_Musk_Royal_Society_%28crop2%29.jpg",
-    "file_page": "https://commons.wikimedia.org/wiki/File%3AElon_Musk_Royal_Society_%28crop2%29.jpg",
+    "file_page": "https://commons.wikimedia.org/wiki/File:Elon_Musk_Royal_Society_(crop2).jpg",
     "author": "Debbie Rowe",
     "license": "CC BY-SA 3.0",
     "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
-    "attribution_text": "Debbie Rowe / CC BY-SA 3.0"
+    "attribution_text": "Debbie Rowe / CC BY-SA 3.0",
+    "note": "Wikimedia Commons 真实照片（2018 年英国皇家学会活动），本地 512x512 裁切。"
    }
   },
   {
@@ -47,17 +71,41 @@
    "style_imitation": true,
    "avatar": "assets/avatars/photo/socrates.jpg",
    "look": {
-    "skin": "#d9a77e",
-    "hair": "#efefef",
-    "hair_style": "bald-ring",
+    "skin": "#e2d5c4",
+    "hair": "#eceae4",
+    "hair_style": "bald-curly-ring",
+    "face_shape": "broad",
+    "face": {
+     "shape": "broad",
+     "width": 1.08,
+     "length": 0.98,
+     "jaw": 1.05,
+     "cheeks": 0.25,
+     "eyeDist": 1.02,
+     "eyeSize": 0.88,
+     "deepSet": 0.82,
+     "noseSize": 1.42,
+     "noseLen": 0.8,
+     "noseStyle": "snub",
+     "browThick": 1.55,
+     "browAngle": 0.08,
+     "mouthW": 0.95,
+     "mouthExpr": "stern",
+     "ageLines": 0.5
+    },
+    "brow_color": "#e8e6e0",
+    "nose_style": "snub",
     "beard": "full",
-    "beard_color": "#f4f4f4",
+    "beard_color": "#f0eee8",
     "glasses": null,
     "outfit": "robe",
-    "outfit_color": "#efe6d2",
+    "outfit_color": "#efe8d6",
     "accent": "#b08d57",
     "accessory": "sandals",
-    "build": 1.12
+    "build": 1.14,
+    "neck_scale": 1.16,
+    "height": 0.99,
+    "face_crop": [0.44, 0.46, 0.21, 0.26]
    },
    "source": {
     "repo": "nuwa-skills/socrates-skill",
@@ -70,11 +118,12 @@
    "avatar_credit": {
     "type": "photo",
     "source_url": "https://upload.wikimedia.org/wikipedia/commons/a/a4/Socrates_Louvre.jpg",
-    "file_page": "https://commons.wikimedia.org/wiki/File%3ASocrates_Louvre.jpg",
-    "author": "Copy of Lysippos (?)",
-    "license": "Public domain",
-    "license_url": "https://creativecommons.org/publicdomain/mark/1.0/",
-    "attribution_text": "Copy of Lysippos (?) / Public domain"
+    "file_page": "https://commons.wikimedia.org/wiki/File:Socrates_Louvre.jpg",
+    "author": "Eric Gaba (User:Sting) · 雕像 Copy of Lysippos (?)",
+    "license": "CC BY-SA 2.5（照片）/ Public domain（雕像）",
+    "license_url": "https://creativecommons.org/licenses/by-sa/2.5",
+    "attribution_text": "Eric Gaba (Sting) / CC BY-SA 2.5（雕像为 Public domain）",
+    "note": "古人无真实照片，采用卢浮宫藏古罗马时期苏格拉底大理石胸像经典照片（Wikimedia Commons），本地 512x512 裁切。"
    }
   },
   {
@@ -84,18 +133,42 @@
    "blurb": "现实主义志愿规划师，大白话戳破滤镜，段子里讲数据",
    "kit": "persona-zhangxuefeng",
    "style_imitation": true,
-   "avatar": "assets/avatars/zhangxuefeng.svg",
+   "avatar": "assets/avatars/photo/zhangxuefeng.jpg",
    "look": {
-    "skin": "#f1c49e",
-    "hair": "#151517",
-    "hair_style": "short",
+    "skin": "#f2c9a8",
+    "hair": "#161619",
+    "hair_style": "textured-crop",
+    "face_shape": "round",
+    "face": {
+     "shape": "round",
+     "width": 1.03,
+     "length": 0.98,
+     "jaw": 1.12,
+     "cheeks": 0.5,
+     "eyeDist": 1.04,
+     "eyeSize": 1.14,
+     "deepSet": 0,
+     "noseSize": 1.06,
+     "noseLen": 0.9,
+     "noseStyle": "button",
+     "browThick": 1.65,
+     "browAngle": 0.04,
+     "mouthW": 1.02,
+     "mouthExpr": "smirk"
+    },
     "beard": null,
-    "glasses": "rect",
+    "glasses": null,
     "outfit": "jacket",
-    "outfit_color": "#1f2937",
-    "accent": "#374151",
+    "outfit_color": "#3d4149",
+    "inner_color": "#1c1e22",
+    "accent": "#717885",
     "accessory": "mic",
-    "build": 1.14
+    "zip_jacket": true,
+    "build": 1.3,
+    "belly": 1.28,
+    "neck_scale": 1.65,
+    "height": 0.96,
+    "face_crop": [0.48, 0.43, 0.17, 0.20]
    },
    "source": {
     "repo": "alchaincyf/zhangxuefeng-skill",
@@ -106,13 +179,13 @@
     "license": "MIT"
    },
    "avatar_credit": {
-    "type": "cartoon",
-    "source_url": null,
+    "type": "photo",
+    "source_url": "https://tvax2.sinaimg.cn/crop.0.0.1080.1080.1024/001Ptb3yly8ibicnjqj0wj60u00u0wgj02.jpg",
     "file_page": null,
-    "author": "本项目原创卡通 SVG（基于公开外形特征）",
-    "license": "MIT",
-    "license_url": "https://opensource.org/licenses/MIT",
-    "attribution_text": "Wikimedia Commons 无自由授权照片（中文维基仅为非自由合理使用），改用高辨识度原创 SVG 卡通"
+    "author": "张雪峰官方微博（@张雪峰老师，新浪新闻引用）",
+    "license": "来源网络，版权归原作者，仅作风格模仿展示",
+    "attribution_text": "张雪峰官方微博 / 来源网络，版权归原作者，仅作风格模仿展示",
+    "note": "Wikimedia Commons 无自由授权照片；取自新浪新闻（https://www.sina.cn/news/detail/5280509626417843.html）关联的 @张雪峰老师 官方微博肖像原图，本地 512x512 裁切。"
    }
   },
   {
@@ -122,19 +195,42 @@
    "blurb": "街头社会学家，冷幽默看人性，一句“这是好事啊”",
    "kit": "persona-fengge",
    "style_imitation": true,
-   "avatar": "assets/avatars/fengge.svg",
+   "avatar": "assets/avatars/photo/fengge.jpg",
    "look": {
-    "skin": "#d69a6f",
-    "hair": "#1c1917",
-    "hair_style": "curly",
-    "beard": "stubble",
-    "beard_color": "#231f1d",
+    "skin": "#cf8e64",
+    "hair": "#191615",
+    "hair_style": "shaggy-curly",
+    "face_shape": "round",
+    "face": {
+     "shape": "round",
+     "width": 1.02,
+     "length": 0.98,
+     "jaw": 1.02,
+     "cheeks": 0.25,
+     "eyeDist": 1.02,
+     "eyeSize": 0.92,
+     "eyeTilt": -0.06,
+     "deepSet": 0.15,
+     "noseSize": 1.14,
+     "noseLen": 0.98,
+     "noseStyle": "broad",
+     "browThick": 1.32,
+     "browAngle": -0.03,
+     "mouthW": 1.0,
+     "mouthExpr": "smile"
+    },
+    "beard": "goatee",
+    "beard_color": "#1e1a18",
     "glasses": null,
     "outfit": "tee",
-    "outfit_color": "#c84b44",
-    "accent": "#1f242c",
+    "outfit_color": "#df5348",
+    "accent": "#1b1e24",
     "accessory": "camera",
-    "build": 1.14
+    "build": 1.16,
+    "belly": 1.1,
+    "neck_scale": 1.15,
+    "height": 1.0,
+    "face_crop": [0.50, 0.43, 0.15, 0.21]
    },
    "source": {
     "repo": "YixiaJack/feng-ge-skill",
@@ -145,13 +241,14 @@
     "license": "MIT"
    },
    "avatar_credit": {
-    "type": "cartoon",
-    "source_url": null,
-    "file_page": null,
-    "author": "本项目原创卡通 SVG（基于公开外形特征）",
-    "license": "MIT",
-    "license_url": "https://opensource.org/licenses/MIT",
-    "attribution_text": "Wikimedia Commons 现有文件属权属待核实/疑似非原始拍摄，改用高辨识度原创 SVG 卡通"
+    "type": "photo",
+    "source_url": "https://upload.wikimedia.org/wikipedia/commons/4/48/Fengge_by_the_riverside_in_Shanghai_at_night.jpg",
+    "file_page": "https://commons.wikimedia.org/wiki/File:Fengge_by_the_riverside_in_Shanghai_at_night.jpg",
+    "author": "Jackeylove333",
+    "license": "CC0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "attribution_text": "Jackeylove333 / CC0",
+    "note": "Wikimedia Commons 真实照片（中文维基「峰哥亡命天涯」条目配图，2024 年上海河畔实拍），经视觉核对确为周丽峰（峰哥亡命天涯）本人，本地 512x512 裁切。"
    }
   },
   {
@@ -163,17 +260,41 @@
    "style_imitation": true,
    "avatar": "assets/avatars/photo/jobs.jpg",
    "look": {
-    "skin": "#efc6a3",
-    "hair": "#6b665f",
-    "hair_style": "short-thin",
+    "skin": "#eec2a2",
+    "hair": "#7c7770",
+    "hair_style": "balding-fringe",
+    "face_shape": "gaunt",
+    "face": {
+     "shape": "gaunt",
+     "width": 0.92,
+     "length": 1.06,
+     "jaw": 0.78,
+     "cheeks": -0.28,
+     "eyeDist": 0.96,
+     "eyeSize": 0.92,
+     "deepSet": 0.55,
+     "noseSize": 0.96,
+     "noseLen": 1.12,
+     "noseStyle": "aquiline",
+     "browThick": 0.95,
+     "browAngle": 0.01,
+     "mouthW": 0.96,
+     "mouthExpr": "smile",
+     "ageLines": 0.45
+    },
+    "brow_color": "#6e6860",
     "beard": "stubble",
-    "beard_color": "#78726a",
+    "beard_color": "#9a958d",
     "glasses": "round",
     "outfit": "turtleneck",
-    "outfit_color": "#121212",
+    "outfit_color": "#121214",
     "accent": "#9aa0a6",
     "accessory": "jeans",
-    "build": 0.96
+    "prop": "iphone",
+    "build": 0.86,
+    "neck_scale": 0.86,
+    "height": 1.02,
+    "face_crop": [0.46, 0.47, 0.20, 0.26]
    },
    "source": {
     "repo": "alchaincyf/steve-jobs-skill",
@@ -186,11 +307,12 @@
    "avatar_credit": {
     "type": "photo",
     "source_url": "https://upload.wikimedia.org/wikipedia/commons/b/b9/Steve_Jobs_Headshot_2010-CROP.jpg",
-    "file_page": "https://commons.wikimedia.org/wiki/File%3ASteve_Jobs_Headshot_2010-CROP.jpg",
-    "author": "Matthew Yohe (talk)",
+    "file_page": "https://commons.wikimedia.org/wiki/File:Steve_Jobs_Headshot_2010-CROP.jpg",
+    "author": "Matthew Yohe",
     "license": "CC BY-SA 3.0",
     "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
-    "attribution_text": "Matthew Yohe (talk) / CC BY-SA 3.0"
+    "attribution_text": "Matthew Yohe / CC BY-SA 3.0",
+    "note": "Wikimedia Commons 真实照片（2010 年 WWDC 现场），本地 512x512 裁切。"
    }
   },
   {
@@ -202,16 +324,44 @@
    "style_imitation": true,
    "avatar": "assets/avatars/photo/munger.jpg",
    "look": {
-    "skin": "#f0c8ae",
-    "hair": "#e8e8e8",
-    "hair_style": "bald-ring",
+    "skin": "#efc2aa",
+    "hair": "#e2e2e2",
+    "hair_style": "bald-sparse",
+    "face_shape": "broad",
+    "face": {
+     "shape": "broad",
+     "width": 1.06,
+     "length": 1.0,
+     "jaw": 1.08,
+     "cheeks": 0.35,
+     "jowls": 0.92,
+     "eyeDist": 1.04,
+     "eyeSize": 0.82,
+     "eyeTilt": -0.1,
+     "deepSet": 0.3,
+     "noseSize": 1.16,
+     "noseLen": 1.02,
+     "noseStyle": "broad",
+     "browThick": 1.45,
+     "browAngle": -0.04,
+     "mouthW": 0.96,
+     "mouthExpr": "smile",
+     "ageLines": 0.9
+    },
+    "brow_color": "#e2e2e2",
     "beard": null,
     "glasses": "thick",
     "outfit": "suit",
-    "outfit_color": "#4b5563",
-    "accent": "#7a1f2b",
+    "outfit_color": "#4a4a42",
+    "inner_color": "#f5f1e3",
+    "accent": "#6e222e",
+    "tie_color": "#6e222e",
     "accessory": "tie",
-    "build": 1.02
+    "posture": "stoop",
+    "build": 1.06,
+    "belly": 1.12,
+    "height": 0.96,
+    "face_crop": [0.54, 0.46, 0.18, 0.24]
    },
    "source": {
     "repo": "alchaincyf/munger-skill",
@@ -224,11 +374,12 @@
    "avatar_credit": {
     "type": "photo",
     "source_url": "https://upload.wikimedia.org/wikipedia/commons/b/bb/Charlie_Munger_2_%28cropped%29.jpg",
-    "file_page": "https://commons.wikimedia.org/wiki/File%3ACharlie_Munger_2_%28cropped%29.jpg",
+    "file_page": "https://commons.wikimedia.org/wiki/File:Charlie_Munger_2_(cropped).jpg",
     "author": "Nick Webb",
     "license": "CC BY 2.0",
     "license_url": "https://creativecommons.org/licenses/by/2.0",
-    "attribution_text": "Nick Webb / CC BY 2.0"
+    "attribution_text": "Nick Webb / CC BY 2.0",
+    "note": "Wikimedia Commons 真实照片（2010 年拍摄），本地 512x512 裁切。"
    }
   },
   {
@@ -240,17 +391,37 @@
    "style_imitation": true,
    "avatar": "assets/avatars/photo/feynman.jpg",
    "look": {
-    "skin": "#f1c9a5",
-    "hair": "#6f5848",
-    "hair_style": "wavy",
+    "skin": "#f2c9a9",
+    "hair": "#5b4333",
+    "hair_style": "wavy-50s",
+    "face_shape": "oval",
+    "face": {
+     "shape": "oval",
+     "width": 0.98,
+     "length": 1.02,
+     "jaw": 0.88,
+     "cheeks": 0.05,
+     "eyeDist": 1.0,
+     "eyeSize": 1.05,
+     "deepSet": 0.1,
+     "noseSize": 1.04,
+     "noseLen": 1.06,
+     "noseStyle": "straight",
+     "browThick": 1.05,
+     "browAngle": -0.03,
+     "mouthW": 1.14,
+     "mouthExpr": "grin"
+    },
     "beard": null,
     "glasses": null,
     "outfit": "shirt",
-    "outfit_color": "#f5f5f0",
-    "accent": "#2a2d34",
+    "outfit_color": "#f3f3ed",
+    "accent": "#22252c",
     "accessory": "bongo",
-    "tie_color": "#2a2d34",
-    "build": 1.0
+    "tie_color": "#22252c",
+    "build": 0.96,
+    "height": 1.0,
+    "face_crop": [0.62, 0.37, 0.15, 0.20]
    },
    "source": {
     "repo": "alchaincyf/feynman-skill",
@@ -263,11 +434,12 @@
    "avatar_credit": {
     "type": "photo",
     "source_url": "https://upload.wikimedia.org/wikipedia/commons/0/06/Richard_Feynman_1959.png",
-    "file_page": "https://commons.wikimedia.org/wiki/File%3ARichard_Feynman_1959.png",
+    "file_page": "https://commons.wikimedia.org/wiki/File:Richard_Feynman_1959.png",
     "author": "Unknown author",
     "license": "Public domain",
     "license_url": "https://creativecommons.org/publicdomain/mark/1.0/",
-    "attribution_text": "Unknown author / Public domain"
+    "attribution_text": "Unknown author / Public domain",
+    "note": "Wikimedia Commons 真实历史照片（1959 年加州理工学院年鉴），本地 512x512 裁切。"
    }
   },
   {
@@ -279,16 +451,43 @@
    "style_imitation": true,
    "avatar": "assets/avatars/photo/trump.jpg",
    "look": {
-    "skin": "#f2b48a",
-    "hair": "#e7c26b",
-    "hair_style": "swoop",
+    "skin": "#ea9961",
+    "hair": "#e8c468",
+    "hair_style": "trump-swoop",
+    "face_shape": "square",
+    "face": {
+     "shape": "square",
+     "width": 1.05,
+     "length": 1.01,
+     "jaw": 1.12,
+     "cheeks": 0.15,
+     "jowls": 0.25,
+     "eyeDist": 0.94,
+     "eyeSize": 0.76,
+     "eyeTilt": -0.04,
+     "deepSet": 0.48,
+     "noseSize": 1.08,
+     "noseLen": 1.02,
+     "noseStyle": "broad",
+     "browThick": 1.42,
+     "browAngle": 0.08,
+     "mouthW": 1.12,
+     "mouthExpr": "grin",
+     "ageLines": 0.55
+    },
+    "brow_color": "#d9c298",
     "beard": null,
     "glasses": null,
     "outfit": "suit",
-    "outfit_color": "#17213a",
-    "accent": "#cc1420",
+    "outfit_color": "#16213c",
+    "accent": "#d61923",
     "accessory": "long-tie",
-    "build": 1.2
+    "build": 1.28,
+    "belly": 1.14,
+    "shoulder_scale": 1.08,
+    "neck_scale": 1.28,
+    "height": 1.09,
+    "face_crop": [0.51, 0.50, 0.24, 0.29]
    },
    "source": {
     "repo": "alchaincyf/trump-skill",
@@ -301,11 +500,12 @@
    "avatar_credit": {
     "type": "photo",
     "source_url": "https://upload.wikimedia.org/wikipedia/commons/5/53/Donald_Trump_official_portrait_%28cropped%29.jpg",
-    "file_page": "https://commons.wikimedia.org/wiki/File%3ADonald_Trump_official_portrait_%28cropped%29.jpg",
-    "author": "Shealeah Craighead",
+    "file_page": "https://commons.wikimedia.org/wiki/File:Donald_Trump_official_portrait_(cropped).jpg",
+    "author": "Shealah Craighead",
     "license": "Public domain",
     "license_url": "https://creativecommons.org/publicdomain/mark/1.0/",
-    "attribution_text": "Shealeah Craighead / Public domain"
+    "attribution_text": "Shealah Craighead / Public domain",
+    "note": "Wikimedia Commons 真实照片（2017 年白宫官方肖像），本地 512x512 裁切。"
    }
   },
   {
@@ -317,18 +517,41 @@
    "style_imitation": true,
    "avatar": "assets/avatars/photo/taleb.jpg",
    "look": {
-    "skin": "#d8a985",
-    "hair": "#8e8e8e",
+    "skin": "#d59e77",
+    "hair": "#7a7875",
     "hair_style": "bald",
+    "face_shape": "square",
+    "face": {
+     "shape": "square",
+     "width": 1.06,
+     "length": 1.0,
+     "jaw": 1.08,
+     "cheeks": 0.15,
+     "eyeDist": 1.0,
+     "eyeSize": 1.02,
+     "deepSet": 0.5,
+     "noseSize": 1.18,
+     "noseLen": 1.16,
+     "noseStyle": "aquiline",
+     "browThick": 1.38,
+     "browAngle": 0.03,
+     "mouthW": 0.98,
+     "mouthExpr": "smirk",
+     "ageLines": 0.35
+    },
+    "brow_color": "#2b2725",
     "beard": "short",
-    "beard_color": "#9a9a9a",
+    "beard_color": "#8c8985",
     "glasses": null,
     "outfit": "jacket",
-    "outfit_color": "#2b2d32",
-    "inner_color": "#121214",
+    "outfit_color": "#363a42",
+    "inner_color": "#121215",
     "accent": "#8c7b5b",
     "accessory": null,
-    "build": 1.12
+    "build": 1.18,
+    "neck_scale": 1.16,
+    "height": 1.03,
+    "face_crop": [0.57, 0.33, 0.13, 0.17]
    },
    "source": {
     "repo": "alchaincyf/taleb-skill",
@@ -341,11 +564,12 @@
    "avatar_credit": {
     "type": "photo",
     "source_url": "https://upload.wikimedia.org/wikipedia/commons/0/0e/Nassim_Nicholas_Taleb_DLD_2009-012_%28cropped%29.jpg",
-    "file_page": "https://commons.wikimedia.org/wiki/File%3ANassim_Nicholas_Taleb_DLD_2009-012_%28cropped%29.jpg",
+    "file_page": "https://commons.wikimedia.org/wiki/File:Nassim_Nicholas_Taleb_DLD_2009-012_(cropped).jpg",
     "author": "nrkbeta",
     "license": "CC BY-SA 2.0",
     "license_url": "https://creativecommons.org/licenses/by-sa/2.0",
-    "attribution_text": "nrkbeta / CC BY-SA 2.0"
+    "attribution_text": "nrkbeta / CC BY-SA 2.0",
+    "note": "Wikimedia Commons 真实照片（2009 年 DLD 会议现场），本地 512x512 裁切。"
    }
   },
   {
@@ -357,17 +581,39 @@
    "style_imitation": true,
    "avatar": "assets/avatars/photo/naval.jpg",
    "look": {
-    "skin": "#c99a72",
-    "hair": "#1c1a19",
-    "hair_style": "wavy-short",
-    "beard": "stubble",
-    "beard_color": "#242120",
+    "skin": "#c28d65",
+    "hair": "#434146",
+    "hair_style": "curly-saltpepper",
+    "face_shape": "gaunt",
+    "face": {
+     "shape": "gaunt",
+     "width": 0.93,
+     "length": 1.02,
+     "jaw": 0.82,
+     "cheeks": -0.22,
+     "eyeDist": 0.96,
+     "eyeSize": 1.04,
+     "deepSet": 0.85,
+     "noseSize": 1.08,
+     "noseLen": 1.1,
+     "noseStyle": "straight",
+     "browThick": 1.35,
+     "browAngle": 0.02,
+     "mouthW": 0.95,
+     "mouthExpr": "smile"
+    },
+    "brow_color": "#272426",
+    "beard": "light-stubble",
+    "beard_color": "#383536",
     "glasses": null,
     "outfit": "tee",
-    "outfit_color": "#2b3644",
-    "accent": "#9fb3c8",
+    "outfit_color": "#3c4658",
+    "accent": "#6c7a90",
     "accessory": null,
-    "build": 0.96
+    "build": 0.88,
+    "neck_scale": 0.88,
+    "height": 0.99,
+    "face_crop": [0.49, 0.45, 0.19, 0.25]
    },
    "source": {
     "repo": "alchaincyf/naval-skill",
@@ -379,12 +625,13 @@
    },
    "avatar_credit": {
     "type": "photo",
-    "source_url": "https://upload.wikimedia.org/wikipedia/commons/7/73/Naval_Ravikant_in_2011_%28cropped%29.jpg",
-    "file_page": "https://commons.wikimedia.org/wiki/File%3ANaval_Ravikant_in_2011_%28cropped%29.jpg",
-    "author": "kris krüg",
-    "license": "CC BY-SA 2.0",
-    "license_url": "https://creativecommons.org/licenses/by-sa/2.0",
-    "attribution_text": "kris krüg / CC BY-SA 2.0"
+    "source_url": "https://upload.wikimedia.org/wikipedia/commons/a/aa/Naval2019.png",
+    "file_page": "https://commons.wikimedia.org/wiki/File:Naval2019.png",
+    "author": "Edmund Hillary Fellowship",
+    "license": "CC BY 3.0",
+    "license_url": "https://creativecommons.org/licenses/by/3.0",
+    "attribution_text": "Edmund Hillary Fellowship / CC BY 3.0",
+    "note": "Wikimedia Commons 真实照片（2019 年 Edmund Hillary Fellowship 访谈正脸），本地 512x512 裁切。"
    }
   },
   {
@@ -394,19 +641,41 @@
    "blurb": "刑法学讲台上的张三案例，法治与良知并举",
    "kit": "persona-luoxiang",
    "style_imitation": true,
-   "avatar": "assets/avatars/luoxiang.svg",
+   "avatar": "assets/avatars/photo/luoxiang.jpg",
    "look": {
-    "skin": "#efc39c",
-    "hair": "#141418",
-    "hair_style": "short",
+    "skin": "#f2cab0",
+    "hair": "#151518",
+    "hair_style": "neat-side",
+    "face_shape": "long",
+    "face": {
+     "shape": "long",
+     "width": 0.94,
+     "length": 1.06,
+     "jaw": 0.72,
+     "cheeks": -0.1,
+     "eyeDist": 0.98,
+     "eyeSize": 0.9,
+     "deepSet": 0.1,
+     "noseSize": 0.88,
+     "noseLen": 1.06,
+     "noseStyle": "straight",
+     "browThick": 0.95,
+     "browAngle": 0.01,
+     "mouthW": 0.96,
+     "mouthExpr": "smile"
+    },
     "beard": null,
-    "glasses": "rect-thin",
+    "glasses": "rect",
     "outfit": "suit",
-    "outfit_color": "#1e293b",
-    "accent": "#7f1d1d",
+    "outfit_color": "#182030",
+    "inner_color": "#eef2f8",
+    "accent": "#8b1e24",
     "accessory": "book",
-    "tie_color": "#253b80",
-    "build": 0.98
+    "tie_color": "#2c4c94",
+    "build": 0.86,
+    "neck_scale": 0.86,
+    "height": 1.04,
+    "face_crop": [0.50, 0.43, 0.20, 0.25]
    },
    "source": {
     "repo": "YixiaJack/luo-xiang-skill",
@@ -417,13 +686,13 @@
     "license": "MIT"
    },
    "avatar_credit": {
-    "type": "cartoon",
-    "source_url": null,
+    "type": "photo",
+    "source_url": "https://p8.itc.cn/images01/20211228/d0c4ab5561564fd1a9d38ba85f43932e.jpeg",
     "file_page": null,
-    "author": "本项目原创卡通 SVG（基于公开外形特征）",
-    "license": "MIT",
-    "license_url": "https://opensource.org/licenses/MIT",
-    "attribution_text": "Wikimedia Commons 与维基百科均无自由授权照片，改用高辨识度原创 SVG 卡通"
+    "author": "搜狐网（搜狐号@北京市文化娱乐法学会）",
+    "license": "来源网络，版权归原作者，仅作风格模仿展示",
+    "attribution_text": "搜狐网 / 来源网络，版权归原作者，仅作风格模仿展示",
+    "note": "Wikimedia Commons 无自由授权照片；取自搜狐网罗翔报道（https://www.sohu.com/a/512411360_120810638）肖像照，本地 512x512 裁切（已裁除右下角水印）。"
    }
   },
   {
@@ -435,17 +704,40 @@
    "style_imitation": true,
    "avatar": "assets/avatars/photo/luxun.jpg",
    "look": {
-    "skin": "#e3b48d",
-    "hair": "#121212",
-    "hair_style": "crew",
+    "skin": "#dfb18c",
+    "hair": "#121214",
+    "hair_style": "luxun-crew",
+    "face_shape": "gaunt",
+    "face": {
+     "shape": "gaunt",
+     "width": 0.92,
+     "length": 1.05,
+     "jaw": 0.76,
+     "cheeks": -0.35,
+     "eyeDist": 0.96,
+     "eyeSize": 0.86,
+     "deepSet": 0.78,
+     "noseSize": 0.96,
+     "noseLen": 1.08,
+     "noseStyle": "straight",
+     "browThick": 1.75,
+     "browAngle": 0.12,
+     "browWidth": 1.14,
+     "mouthW": 0.9,
+     "mouthExpr": "stern",
+     "ageLines": 0.45
+    },
     "beard": "mustache",
-    "beard_color": "#121212",
+    "beard_color": "#121214",
     "glasses": null,
     "outfit": "changshan",
-    "outfit_color": "#3f454e",
-    "accent": "#23272e",
+    "outfit_color": "#676e78",
+    "accent": "#282c34",
     "accessory": "pipe",
-    "build": 0.95
+    "build": 0.86,
+    "neck_scale": 0.88,
+    "height": 0.98,
+    "face_crop": [0.49, 0.44, 0.19, 0.26]
    },
    "source": {
     "repo": "Qcunyu/Deep-LuXun-skill",
@@ -458,11 +750,12 @@
    "avatar_credit": {
     "type": "photo",
     "source_url": "https://upload.wikimedia.org/wikipedia/commons/4/48/LuXun1930.jpg",
-    "file_page": "https://commons.wikimedia.org/wiki/File%3ALuXun1930.jpg",
+    "file_page": "https://commons.wikimedia.org/wiki/File:LuXun1930.jpg",
     "author": "Unknown author",
     "license": "Public domain",
     "license_url": "https://creativecommons.org/publicdomain/mark/1.0/",
-    "attribution_text": "Unknown author / Public domain"
+    "attribution_text": "Unknown author / Public domain",
+    "note": "Wikimedia Commons 真实历史照片（1930 年拍摄），本地 512x512 裁切。"
    }
   },
   {
@@ -474,17 +767,40 @@
    "style_imitation": true,
    "avatar": "assets/avatars/photo/nietzsche.jpg",
    "look": {
-    "skin": "#f0c9a8",
-    "hair": "#5a4232",
-    "hair_style": "swept",
+    "skin": "#efc8a8",
+    "hair": "#4c3526",
+    "hair_style": "nietzsche-swept",
+    "face_shape": "square",
+    "face": {
+     "shape": "square",
+     "width": 1.02,
+     "length": 1.04,
+     "jaw": 1.02,
+     "cheeks": 0,
+     "eyeDist": 0.96,
+     "eyeSize": 0.84,
+     "deepSet": 1.0,
+     "noseSize": 1.08,
+     "noseLen": 1.12,
+     "noseStyle": "aquiline",
+     "browThick": 1.78,
+     "browAngle": 0.11,
+     "browWidth": 1.12,
+     "mouthW": 0.92,
+     "mouthExpr": "stern"
+    },
+    "brow_color": "#452f21",
     "beard": "walrus",
-    "beard_color": "#4a3426",
+    "beard_color": "#3d291d",
     "glasses": null,
     "outfit": "suit",
-    "outfit_color": "#26221e",
-    "accent": "#f0eadb",
-    "accessory": null,
-    "build": 1.0
+    "outfit_color": "#26211d",
+    "inner_color": "#f2ece0",
+    "tie_color": "#181512",
+    "accent": "#f2ece0",
+    "accessory": "tie",
+    "build": 1.0,
+    "height": 1.0
    },
    "source": {
     "repo": "nuwa-skills/nietzsche-skill",
@@ -497,11 +813,12 @@
    "avatar_credit": {
     "type": "photo",
     "source_url": "https://upload.wikimedia.org/wikipedia/commons/2/23/Nietzsche1882.jpg",
-    "file_page": "https://commons.wikimedia.org/wiki/File%3ANietzsche1882.jpg",
+    "file_page": "https://commons.wikimedia.org/wiki/File:Nietzsche1882.jpg",
     "author": "Gustav-Adolf Schultze (d. 1897)",
     "license": "Public domain",
     "license_url": "https://creativecommons.org/publicdomain/mark/1.0/",
-    "attribution_text": "Gustav-Adolf Schultze (d. 1897) / Public domain"
+    "attribution_text": "Gustav-Adolf Schultze (d. 1897) / Public domain",
+    "note": "Wikimedia Commons 真实历史照片（1882 年 Gustav-Adolf Schultze 摄于瑙姆堡），本地 512x512 裁切。"
    }
   },
   {
@@ -513,17 +830,43 @@
    "style_imitation": true,
    "avatar": "assets/avatars/photo/confucius.jpg",
    "look": {
-    "skin": "#e6b98f",
-    "hair": "#3a3a3a",
+    "skin": "#e2a685",
+    "hair": "#222226",
     "hair_style": "topknot",
+    "face_shape": "broad",
+    "face": {
+     "shape": "broad",
+     "width": 1.05,
+     "length": 1.04,
+     "jaw": 1.06,
+     "cheeks": 0.2,
+     "eyeDist": 1.06,
+     "eyeSize": 0.9,
+     "deepSet": 0.4,
+     "noseSize": 1.24,
+     "noseLen": 1.04,
+     "noseStyle": "broad",
+     "browThick": 1.38,
+     "browAngle": 0.14,
+     "browWidth": 1.26,
+     "mouthW": 0.98,
+     "mouthExpr": "stern",
+     "ageLines": 0.65
+    },
+    "brow_color": "#1f1f24",
     "beard": "long",
-    "beard_color": "#4f4f4f",
+    "beard_color": "#1a1a1f",
     "glasses": null,
     "outfit": "robe",
-    "outfit_color": "#b8935a",
-    "accent": "#5b3a1a",
+    "outfit_color": "#2b4c6f",
+    "inner_color": "#f5f2ea",
+    "accent": "#2563eb",
+    "belt_color": "#b8862d",
     "accessory": "scholar-hat",
-    "build": 1.06
+    "build": 1.1,
+    "neck_scale": 1.1,
+    "height": 1.04,
+    "face_crop": [0.44, 0.36, 0.15, 0.20]
    },
    "source": {
     "repo": "nuwa-skills/kongzi-skill",
@@ -536,11 +879,12 @@
    "avatar_credit": {
     "type": "photo",
     "source_url": "https://upload.wikimedia.org/wikipedia/commons/f/f2/Cropped_version_of_Confucius_Portrait%2C_Kongzi_%28Confucius%29_Family_Mansion%2C_Qufu_%2813044335945%29.jpg",
-    "file_page": "https://commons.wikimedia.org/wiki/File%3ACropped_version_of_Confucius_Portrait%2C_Kongzi_%28Confucius%29_Family_Mansion%2C_Qufu_%2813044335945%29.jpg",
-    "author": "Unknown author",
+    "file_page": "https://commons.wikimedia.org/wiki/File:Cropped_version_of_Confucius_Portrait,_Kongzi_(Confucius)_Family_Mansion,_Qufu_(13044335945).jpg",
+    "author": "Gary Todd (摄) / 明代佚名画作",
     "license": "Public domain",
     "license_url": "https://creativecommons.org/publicdomain/mark/1.0/",
-    "attribution_text": "Unknown author / Public domain"
+    "attribution_text": "Gary Todd (摄) / 明代佚名画作 / Public domain",
+    "note": "古人无真实照片，采用曲阜孔府藏《孔子像》经典传世画像照片（Wikimedia Commons），本地 512x512 裁切。"
    }
   },
   {
@@ -552,16 +896,40 @@
    "style_imitation": true,
    "avatar": "assets/avatars/photo/paulgraham.jpg",
    "look": {
-    "skin": "#f2cdb0",
-    "hair": "#6e6058",
-    "hair_style": "short",
+    "skin": "#f3b29b",
+    "hair": "#7d6352",
+    "hair_style": "receding-side",
+    "face_shape": "oval-round",
+    "face": {
+     "shape": "oval-round",
+     "width": 1.02,
+     "length": 1.01,
+     "jaw": 0.96,
+     "cheeks": 0.35,
+     "eyeDist": 1.02,
+     "eyeSize": 1.14,
+     "deepSet": 0.05,
+     "noseSize": 1.08,
+     "noseLen": 0.94,
+     "noseStyle": "button",
+     "browThick": 0.85,
+     "browAngle": -0.05,
+     "mouthW": 1.08,
+     "mouthExpr": "open-smile",
+     "ageLines": 0.3
+    },
+    "brow_color": "#6f5646",
     "beard": null,
     "glasses": null,
     "outfit": "polo",
-    "outfit_color": "#c92a2a",
+    "outfit_color": "#c9242b",
     "accent": "#ffffff",
+    "pants_color": "#8c7b65",
     "accessory": null,
-    "build": 1.02
+    "build": 1.08,
+    "belly": 1.08,
+    "height": 1.04,
+    "face_crop": [0.49, 0.44, 0.18, 0.24]
    },
    "source": {
     "repo": "alchaincyf/paul-graham-skill",
@@ -574,11 +942,12 @@
    "avatar_credit": {
     "type": "photo",
     "source_url": "https://upload.wikimedia.org/wikipedia/commons/c/c7/Paul_Graham_TechCrunch_Disrupt_New_York_May_2011.jpg",
-    "file_page": "https://commons.wikimedia.org/wiki/File%3APaul_Graham_TechCrunch_Disrupt_New_York_May_2011.jpg",
-    "author": "Charles Eshelman / Getty Images for AOL（via TechCrunch, Flickr）",
+    "file_page": "https://commons.wikimedia.org/wiki/File:Paul_Graham_TechCrunch_Disrupt_New_York_May_2011.jpg",
+    "author": "Charles Eshelman / Getty Images for AOL (via TechCrunch, Flickr)",
     "license": "CC BY 2.0",
     "license_url": "https://creativecommons.org/licenses/by/2.0",
-    "attribution_text": "Charles Eshelman / Getty Images for AOL（via TechCrunch, Flickr）· CC BY 2.0"
+    "attribution_text": "Charles Eshelman / Getty Images for AOL (via TechCrunch, Flickr) · CC BY 2.0",
+    "note": "Wikimedia Commons 真实照片（2011 年 TechCrunch Disrupt NY 现场），本地 512x512 裁切。"
    }
   },
   {
@@ -588,18 +957,39 @@
    "blurb": "延迟满足与“务实的浪漫”，冷静地算概率",
    "kit": "persona-zhangyiming",
    "style_imitation": true,
-   "avatar": "assets/avatars/zhangyiming.svg",
+   "avatar": "assets/avatars/photo/zhangyiming.jpg",
    "look": {
-    "skin": "#f0c7a1",
-    "hair": "#161616",
-    "hair_style": "short",
+    "skin": "#f2caa8",
+    "hair": "#17171a",
+    "hair_style": "short-spiky",
+    "face_shape": "oval-round",
+    "face": {
+     "shape": "oval-round",
+     "width": 1.0,
+     "length": 1.0,
+     "jaw": 0.94,
+     "cheeks": 0.3,
+     "eyeDist": 1.06,
+     "eyeSize": 0.94,
+     "deepSet": 0,
+     "noseSize": 0.92,
+     "noseLen": 0.92,
+     "noseStyle": "button",
+     "browThick": 0.84,
+     "browAngle": 0,
+     "mouthW": 0.96,
+     "mouthExpr": "smile"
+    },
     "beard": null,
     "glasses": "rect-thin",
-    "outfit": "polo",
-    "outfit_color": "#1f2937",
-    "accent": "#e5e7eb",
+    "outfit": "jacket",
+    "outfit_color": "#24496e",
+    "inner_color": "#74bdf7",
+    "accent": "#74bdf7",
     "accessory": null,
-    "build": 1.0
+    "build": 0.98,
+    "height": 0.98,
+    "face_crop": [0.50, 0.46, 0.22, 0.28]
    },
    "source": {
     "repo": "alchaincyf/zhang-yiming-skill",
@@ -610,15 +1000,15 @@
     "license": "MIT"
    },
    "avatar_credit": {
-    "type": "cartoon",
-    "source_url": null,
+    "type": "photo",
+    "source_url": "https://imageio.forbes.com/specials-images/imageserve/618e91e427fcd6441f93c0c6/0x0.jpg",
     "file_page": null,
-    "author": "本项目原创卡通 SVG（基于公开外形特征）",
-    "license": "MIT",
-    "license_url": "https://opensource.org/licenses/MIT",
-    "attribution_text": "Wikimedia Commons 原文件（The_CEO_Magazine_Cover.jpg）为杂志封面且作者/来源仅标注 Own work 权属不清，已撤下并改用高辨识度原创 SVG 卡通"
+    "author": "Forbes",
+    "license": "来源网络，版权归原作者，仅作风格模仿展示",
+    "attribution_text": "Forbes / 来源网络，版权归原作者，仅作风格模仿展示",
+    "note": "Wikimedia Commons 无合格自由授权照片；取自 Forbes 张一鸣人物档案页（https://www.forbes.com/profile/zhang-yiming/）官方肖像原图，本地 512x512 裁切。"
    }
   }
  ],
- "note": "人格辩手：skill 原文来自 GitHub 开源仓库（均为 MIT），一律「风格模仿」，不得冒用真人身份做事实断言；头像优先采用 Wikimedia Commons 自由授权真人/历史照片（Public domain / CC BY / CC BY-SA），其余无合格自由授权照片者采用高辨识度原创 SVG 卡通。"
+ "note": "人格辩手：skill 原文来自 GitHub 开源仓库（均为 MIT），一律「风格模仿」，不得冒用真人身份做事实断言；16 位人物头像全部采用本地化 512x512 真人照片（古代人物采用经典画像/大理石胸像照片），优先选用 Wikimedia Commons 自由授权（Public domain / CC0 / CC BY / CC BY-SA），其余采用公开新闻/官方肖像并标注出处与版权说明。"
 }
