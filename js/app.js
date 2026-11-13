@@ -141,7 +141,10 @@ async function route(force) {
   const m = location.hash.match(/^#\/s\/([^/?]+)/);
   if (m) {
     const sid = decodeURIComponent(m[1]);
-    if (!current || current.sid !== sid || force) { current?.close(); current = openSession(sid); }
+    if (!current || current.sid !== sid || force) {
+      current?.close(); current = null;
+      try { current = openSession(sid); } catch (e) { console.error(e); }
+    }
     $('home').classList.add('hidden'); $('session').classList.remove('hidden');
     stopHome();
   } else {
@@ -386,7 +389,7 @@ function msgRuleTxt(m) {     // one finished utterance: spoken length vs. its ti
 }
 
 function openSession(sid) {
-  const S = { sid, topic: null, roles: [], byId: new Map(), msgs: [], status: {}, verdict: null, finalExists: false,
+  const S = { sid, topic: null, roles: [], byId: new Map(), msgs: [], status: {}, verdict: null, export: null, finalExists: false,
     cursor: 0, follow: true, playing: false, tab: 'tl', closed: false, arrival: new Map(), verdictShownFor: -1, lastBundle: 0, openItems: new Set(), live: null, ws: null };
   const ctl = { sid, close, showRole, seek };
   let pollAbort = null, playTimer = 0, uiTimer = 0, snapTimer = 0, subAbort = null;
@@ -394,6 +397,10 @@ function openSession(sid) {
   $('pane').innerHTML = '<div class="tl-ann"><span>加载中…</span></div>';
   $('sTitle').textContent = '加载中…'; $('kicker').textContent = '';
   $('verdict').classList.remove('on'); $('drawer').classList.add('hidden');
+  $('tPh').textContent = ''; $('tClk').textContent = '--:--'; $('tSub').textContent = '';
+  $('tClk').className = 'clk';
+  const pb = $('phasebar'); pb.innerHTML = ''; pb._k = undefined; pb.classList.add('hidden');
+  stage?.update({ bubbles: [], votes: null, consensus: false, busy: false });
 
   const mode = () => S.topic?.mode || S.status.mode || (String(sid).startsWith('db-') ? 'debate' : 'roundtable');
   const roleName = (id) => S.byId.get(id)?.name || (id ? '角色 ' + id : '');
@@ -435,6 +442,7 @@ function openSession(sid) {
     S.status = b.status || {};
     applyTopic(b.topic || { mode: S.status.mode || mode(), topic: S.status.topic, roles: [], allocating: true });
     S.verdict = b.verdict || null;
+    S.export = b.export || null;
     S.finalExists = !!(b.final_exists || b.final_text);
     S.finalText = b.final_text;
     S.live = b.live || null;
@@ -453,6 +461,7 @@ function openSession(sid) {
     if (j.topic && (!S.topic || (j.topic.roles || []).length !== S.roles.length || S.topic.allocating)) applyTopic(j.topic);
     if (j.status) { S.status = j.status; normalizeRules(); if (!S.roles.length) setupStage(); }
     if (j.verdict) S.verdict = j.verdict;
+    if (j.export) S.export = j.export;
     if (j.final_exists != null) S.finalExists = j.final_exists;
     if ('live' in j) { S.live = j.live; renderLive(); }
     let added = 0;
@@ -461,7 +470,11 @@ function openSession(sid) {
       S.msgs.push(m); S.arrival.set(m.idx, performance.now()); recordLatency(m); added++;
     }
     if (S.follow) S.cursor = S.msgs.length;
-    if (added || j.status) renderAll();
+    if (added || j.status || j.verdict) renderAll();
+    else if (j.export) {
+      if (S.tab === 'verdict') renderVerdictPane();
+      else if (S.tab === 'final') renderFinal();
+    }
   }
 
   async function load() {
@@ -493,6 +506,7 @@ function openSession(sid) {
         else if (ev.type === 'status') applyIncoming({ status: d });
         else if (ev.type === 'live') { S.live = d; recordLiveLatency(d); renderLive(); }
         else if (ev.type === 'verdict') applyIncoming({ verdict: d });
+        else if (ev.type === 'export') applyIncoming({ export: d });
         else if (ev.type === 'topic') applyIncoming({ topic: d });
         else if (ev.type === 'final') S.finalExists = !!d.exists;
       };
@@ -893,11 +907,31 @@ function openSession(sid) {
       rows.map(([k, l]) => `<span>${l}</span><div class="bar aff"><i data-w="${v.scores.aff[k] * 10}"></i></div><div class="bar neg"><i data-w="${v.scores.neg[k] * 10}"></i></div>`).join('') + '</div>';
   }
   function growBars(root) { requestAnimationFrame(() => setTimeout(() => root.querySelectorAll('.bar i').forEach((i) => { i.style.width = i.dataset.w + '%'; }), 60)); }
+  function exportBoxHtml() {
+    if (mode() !== 'debate' || S.topic?.legacy || sid === 'pnp-20261112') return '';
+    if (!S.verdict && !S.export) return '';
+    const ex = S.export;
+    if (Net.mode !== 'live' || !Net.base) {
+      return '<div class="export-box"><div class="ex-title">📄 赛后报告导出</div><div class="ex-note">快照模式无法直接下载动态报告，请连接实时服务端后下载 HTML / PDF。</div></div>';
+    }
+    if (ex?.ready) {
+      const base = Net.base.replace(/\/$/, '') + '/api/s/' + encodeURIComponent(sid);
+      return `<div class="export-box ready"><div class="ex-title">📄 赛后裁判报告（已就绪）</div><div class="ex-actions"><a class="btn small" href="${esc(base + '/export.html')}" download>⬇ 下载 HTML 报告</a><a class="btn small ghost" href="${esc(base + '/export.pdf')}" download>⬇ 下载 PDF 报告</a></div></div>`;
+    }
+    const st = ex?.state || 'pending';
+    let msg = '赛后报告正在生成中…';
+    if (st === 'missing_report') msg = '该场旧裁决缺少结构化 report，需管理员运行 CLI 补产后方可下载。';
+    else if (st === 'missing_data' || st === 'failed') msg = `赛后报告暂不可用：${esc(ex?.error || '数据校验未通过')}`;
+    else if (st === 'stale') msg = '裁决已更新，正在重建最新 HTML / PDF 报告…';
+    else if (st === 'not_applicable') return '';
+    return `<div class="export-box"><div class="ex-title">📄 赛后报告导出</div><div class="ex-note">${msg}</div></div>`;
+  }
   function renderVerdictPane() {
     const v = S.verdict;
     if (!v) { $('pane').innerHTML = `<div class="tl-ann"><span>${S.status.state === 'judging' ? (S.status.judge_status === 'fallback_claude' ? '⚖️ 兜底裁判（Claude Code CLI）评议中…' : '⚖️ 已发出 judge_request，等待 Gemini 传令官…') : '比赛结束后由裁判宣判'}</span></div>`; return; }
     const w = v.winner === 'aff' ? '正方' : '反方';
     $('pane').innerHTML = `<div class="vcard"><div style="font-size:12px;letter-spacing:.2em;opacity:.7">VERDICT · 判决</div><div class="w ${v.winner}">🏆 ${w}胜</div>${scoresHtml(v)}</div>
+      ${exportBoxHtml()}
       <h3 style="font-size:15px;margin:6px 0">判决理由（RFD）</h3><div class="rfd">${esc(v.rfd)}</div>
       ${v.key_clashes?.length ? `<h3 style="font-size:15px;margin:12px 0 6px">关键交锋</h3><ol class="pts">${v.key_clashes.map((c) => `<li>${esc(c)}</li>`).join('')}</ol>` : ''}
       <h3 style="font-size:15px;margin:12px 0 6px">辩手分</h3><div class="pts">${(v.speaker_points || []).map((p) => `<div><b>${esc(p.name)}</b> ${p.points} <span style="color:var(--muted)">${esc(p.note || '')}</span></div>`).join('')}</div>
@@ -909,8 +943,9 @@ function openSession(sid) {
     try {
       const f = S.finalText != null && Net.mode !== 'live' ? { exists: !!S.finalText, text: S.finalText } : await API.final(sid);
       if (S.tab !== 'final' || S.closed) return;
-      $('pane').innerHTML = f.exists ? `<div class="md" style="font-size:14px;line-height:1.7">${md(f.text)}</div>` : `<div class="tl-ann"><span>终稿尚未生成${running() ? '（结束时自动生成）' : ''}</span></div>`;
-    } catch { $('pane').innerHTML = '<div class="tl-ann"><span>终稿尚未生成</span></div>'; }
+      const exHtml = exportBoxHtml();
+      $('pane').innerHTML = f.exists ? `${exHtml}<div class="md" style="font-size:14px;line-height:1.7">${md(f.text)}</div>` : `${exHtml}<div class="tl-ann"><span>终稿尚未生成${running() ? '（结束时自动生成）' : ''}</span></div>`;
+    } catch { $('pane').innerHTML = `${exportBoxHtml()}<div class="tl-ann"><span>终稿尚未生成</span></div>`; }
   }
   function renderPane() {
     if (S.tab === 'tl') renderTimeline();
@@ -972,7 +1007,7 @@ function openSession(sid) {
     if (!f.showVerdict) $('verdict').classList.remove('on');
   }
   // timer + live frame refresh (cheap)
-  uiTimer = setInterval(() => { const f = computeFrame(); stage?.update(f); renderTimerCard(f); renderLive(); renderPhaseBar(f); }, 400);
+  uiTimer = setInterval(() => { if (S.closed) { clearInterval(uiTimer); return; } const f = computeFrame(); stage?.update(f); renderTimerCard(f); renderLive(); renderPhaseBar(f); }, 400);
 
   // ---------------- replay controls
   function seek(n, fromUser) {
