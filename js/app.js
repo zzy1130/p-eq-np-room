@@ -202,12 +202,49 @@ const Personas = { list: [], byId: new Map(), pick: { aff: [null, null], neg: [n
 // avatars are inlined as data: URIs (fetched once) — <img> tags created inside the live timeline could stall behind the
 // page's long-lived connections, and data URIs also make the avatars independent of where the page is hosted.
 function assetUrl(p) { return Personas.data.get(p) || new URL(p, location.href).href; }
+function mimeForAvatar(path, ct) {
+  if (ct && ct.startsWith('image/') && !ct.includes('octet-stream')) return ct.split(';')[0];
+  const ext = String(path).split('?')[0].split('.').pop().toLowerCase();
+  return ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', svg: 'image/svg+xml' })[ext] || 'image/jpeg';
+}
+function blobToDataUrl(blob, mime) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsDataURL(blob.type === mime ? blob : new Blob([blob], { type: mime }));
+  });
+}
+function avatarCreditLine(c, asLink) {
+  if (!c) return '';
+  if (c.type === 'photo') {
+    const label = `📷 ${c.author || 'Unknown'} · ${c.license || ''}`;
+    if (asLink && (c.file_page || c.source_url)) {
+      return `<a class="src avcred" href="${esc(c.file_page || c.source_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${esc(c.attribution_text || label)}">${esc(label)}</a>`;
+    }
+    return `<span class="avcred" title="${esc(c.attribution_text || label)}">${esc(label)}</span>`;
+  }
+  return `<span class="avcred" title="${esc(c.attribution_text || '')}">🎨 原创卡通 · ${esc(c.license || 'MIT')}</span>`;
+}
 function loadPersonas() {
   if (!Personas.loaded) Personas.loaded = fetch(new URL('assets/personas.json', location.href).href + '?v=' + Date.now(), { cache: 'no-store' })
     .then((r) => r.json()).then(async (j) => {
       Personas.list = j.personas || []; Personas.byId = new Map(Personas.list.map((p) => [p.id, p]));
-      await Promise.all(Personas.list.map((p) => fetch(new URL(p.avatar, location.href).href).then((r) => r.text())
-        .then((t) => Personas.data.set(p.avatar, 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(t))).catch(() => {})));
+      await Promise.all(Personas.list.map(async (p) => {
+        try {
+          const url = new URL(p.avatar, location.href).href;
+          const r = await fetch(url);
+          if (!r.ok) return;
+          if (/\.svg(\?|$)/i.test(p.avatar)) {
+            const t = await r.text();
+            Personas.data.set(p.avatar, 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(t));
+          } else {
+            const blob = await r.blob();
+            const mime = mimeForAvatar(p.avatar, r.headers.get('content-type'));
+            Personas.data.set(p.avatar, await blobToDataUrl(blob, mime));
+          }
+        } catch {}
+      }));
       Personas.version++;
     })
     .catch(() => { Personas.loaded = null; });
@@ -220,8 +257,9 @@ function chosenIds() { return [...Personas.pick.aff, ...Personas.pick.neg, ...Pe
 function slotHtml(side, i) {
   const p = Personas.byId.get(Personas.pick[side][i]);
   const lab = (side === 'aff' ? '正方' : '反方') + (i ? '二辩' : '一辩');
-  return `<button type="button" class="pslot ${p ? 'on' : ''}" data-side="${side}" data-i="${i}" title="${p ? esc(p.blurb) : '点击选择人格辩手'}">
-    ${p ? `<img src="${esc(assetUrl(p.avatar))}" alt="">` : '<span class="auto">AI</span>'}
+  const tip = p ? (p.blurb + (p.avatar_credit?.attribution_text ? ' | 头像：' + p.avatar_credit.attribution_text : '')) : '点击选择人格辩手';
+  return `<button type="button" class="pslot ${p ? 'on' : ''}" data-side="${side}" data-i="${i}" title="${esc(tip)}">
+    ${p ? `<img src="${esc(assetUrl(p.avatar))}" alt="${esc(p.name)}">` : '<span class="auto">AI</span>'}
     <b>${lab}</b><span>${p ? esc(p.name) : '自动生成'}</span></button>`;
 }
 function renderPickers() {
@@ -231,8 +269,8 @@ function renderPickers() {
     box.innerHTML = ['aff', 'neg'].map((side) => `<div class="prow"><span class="pside ${side}">${side === 'aff' ? '正方' : '反方'}</span>${slotHtml(side, 0)}${slotHtml(side, 1)}</div>`).join('');
   } else {
     $('pickLabel').textContent = '选参与者（可选，最多 6 位人格角色；主持人、定稿人和其余角色由 AI 自动生成）';
-    box.innerHTML = `<div class="pgrid small">${Personas.list.map((p) => `<button type="button" class="pcard ${Personas.pick.roundtable.includes(p.id) ? 'on' : ''}" data-rt="${esc(p.id)}">
-      <img src="${esc(assetUrl(p.avatar))}" alt=""><b>${esc(p.name)}</b><span>${esc(p.blurb)}</span></button>`).join('')}</div>`;
+    box.innerHTML = `<div class="pgrid small">${Personas.list.map((p) => `<button type="button" class="pcard ${Personas.pick.roundtable.includes(p.id) ? 'on' : ''}" data-rt="${esc(p.id)}" title="${esc(p.avatar_credit?.attribution_text || '')}">
+      <img src="${esc(assetUrl(p.avatar))}" alt="${esc(p.name)}"><b>${esc(p.name)}</b><span>${esc(p.blurb)}</span>${avatarCreditLine(p.avatar_credit, false)}</button>`).join('')}</div>`;
   }
 }
 function openPicker(side, i) {
@@ -240,9 +278,10 @@ function openPicker(side, i) {
   const el = $('ppick');
   el.innerHTML = `<div class="pphead"><b>选择${side === 'aff' ? '正方' : '反方'}${i ? '二辩' : '一辩'}</b><button type="button" class="btn ghost small" data-close>关闭</button></div>
     <div class="pgrid"><button type="button" class="pcard auto ${cur ? '' : 'on'}" data-pid=""><span class="autoav">AI</span><b>AI 自动生成</b><span>由分配官按议题生成</span></button>
-    ${Personas.list.map((p) => `<button type="button" class="pcard ${cur === p.id ? 'on' : ''}" data-pid="${esc(p.id)}" ${used.has(p.id) && cur !== p.id ? 'disabled' : ''}>
+    ${Personas.list.map((p) => `<button type="button" class="pcard ${cur === p.id ? 'on' : ''}" data-pid="${esc(p.id)}" ${used.has(p.id) && cur !== p.id ? 'disabled' : ''} title="${esc(p.avatar_credit?.attribution_text || '')}">
       <img src="${esc(assetUrl(p.avatar))}" alt="${esc(p.name)}"><b>${esc(p.name)}</b><span>${esc(p.blurb)}</span>
-      <a class="src" href="${esc(p.source.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(p.source.repo)} · ${esc(p.source.license)}</a></button>`).join('')}</div>`;
+      <a class="src" href="${esc(p.source.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(p.source.repo)} · ${esc(p.source.license)}</a>
+      ${avatarCreditLine(p.avatar_credit, true)}</button>`).join('')}</div>`;
   el.classList.remove('hidden');
   el.onclick = (e) => {
     if (e.target.closest('[data-close]')) { el.classList.add('hidden'); return; }
@@ -378,7 +417,11 @@ function openSession(sid) {
   }
   function setupStage() {
     const m = mode();
-    const roles = S.roles.length ? S.roles : (m === 'debate' ? DEBATE_PLACEHOLDER_ROLES : []);
+    const raw = S.roles.length ? S.roles : (m === 'debate' ? DEBATE_PLACEHOLDER_ROLES : []);
+    const roles = raw.map((r) => {
+      const pInfo = r.persona_id ? Personas.byId.get(r.persona_id) : null;
+      return pInfo?.look ? { ...r, look: pInfo.look } : r;
+    });
     $('stageWrap').classList.toggle('debate', m === 'debate');
     if (roles.length) getStage().setup({ mode: m, roles, seed: sid });   // setup() is a no-op when mode/roles are unchanged
   }
@@ -667,8 +710,9 @@ function openSession(sid) {
         const vote = m.type === 'vote' ? `<b style="color:${m.vote === 'disagree' ? 'var(--neg)' : 'var(--good)'}">${m.vote === 'disagree' ? '✗ 反对' : '✓ 赞成'}</b>` : '';
         const lim = (m.limit_chars || m.budget_chars) ? `<div class="lim ${m.truncated || m.overtime ? 'bad' : ''}">${msgRuleTxt(m)}</div>` : '';
         const short = m.type === 'vote' ? (m.position || m.short) : m.type === 'proposal' ? '表决：' + (m.conclusion || m.short) : m.short;
+        const av = (r?.persona_id && Personas.byId.get(r.persona_id)?.avatar) || r?.avatar;
         return `<div class="tl-item${S.openItems.has(i) ? ' open' : ''}" data-i="${i}" style="--c:${colorOf(m.role_id)}">
-          <div class="av">${r?.avatar ? `<img class="avimg" src="${esc(assetUrl(r.avatar))}" alt="">` : esc((r?.name || m.role || '?').replace(/^(正方|反方)/, '').replace(/^[一二]辩·?/, '').slice(0, 1))}</div>
+          <div class="av">${av ? `<img class="avimg" src="${esc(assetUrl(av))}" alt="">` : esc((r?.name || m.role || '?').replace(/^(正方|反方)/, '').replace(/^[一二]辩·?/, '').slice(0, 1))}</div>
           <div><div class="hd"><b>${esc(r?.name || m.role || '')}</b><span class="tp" style="--tc:${col}">${esc(lab)}</span>${ph}${vote}<span style="color:var(--muted)">${to}</span><span class="t">${esc((m.ts || '').slice(11, 19))}</span></div>
           <div class="sm">${esc(short || plain(m.text, 60))}</div>${lim}
           ${(m.assess || m.self_review) ? `<details class="think-proc"><summary>💭 思考过程</summary>${m.assess ? `<div class="tp-h">评估别人的论据</div><div class="md">${md(m.assess)}</div>` : ''}${m.self_review ? `<div class="tp-h">对照自己上一轮</div><div class="md">${md(m.self_review)}</div>` : ''}</details>` : ''}
@@ -702,8 +746,14 @@ function openSession(sid) {
   function roleCard(r, withHist) {
     const side = { aff: '正方', neg: '反方', judge: 'Gemini 裁判', chair: '主持' }[r.side] || '';
     const mine = withHist ? S.msgs.filter((m) => m.role_id === r.id && m.type !== 'announce') : [];
-    return `<div class="role" data-r="${r.id}" style="--c:${colorOf(r.id)}"><div class="rh"><span class="av${r.avatar ? ' img' : ''}" ${r.avatar ? `style="background-image:url('${esc(assetUrl(r.avatar))}')"` : ''}></span><b>${esc(r.name)}</b>${side ? `<span class="sd ${r.side}">${side}</span>` : ''}${r.persona_id ? '<span class="persona-badge">人格辩手 · 风格模仿</span>' : ''}</div>
-      ${r.persona_source ? `<div class="kit" style="margin-top:6px"><div class="k">🎭 ${esc(r.persona_name)}（${esc(r.persona_en || '')}）· 风格模仿</div><div class="desc">${esc(r.persona_blurb || '')}</div><div class="src">人格 skill 出处 <a href="${esc(r.persona_source.url)}" target="_blank" rel="noopener">${esc(r.persona_source.repo)}</a>${r.persona_source.stars ? `<span class="star">★ ${Number(r.persona_source.stars).toLocaleString()}</span>` : ''} · ${esc(r.persona_source.license)}</div><div class="desc">不代表本人观点，不作事实断言；头像为生成的卡通形象。</div></div>` : ''}
+    const pInfo = r.persona_id ? Personas.byId.get(r.persona_id) : null;
+    const av = pInfo?.avatar || r.avatar;
+    const cred = r.avatar_credit || pInfo?.avatar_credit;
+    const credDesc = cred?.type === 'photo'
+      ? `头像来源：<a href="${esc(cred.file_page || cred.source_url)}" target="_blank" rel="noopener">${esc(cred.author || 'Unknown')}</a> · ${esc(cred.license || '')}（Wikimedia Commons）`
+      : '头像为本项目原创 SVG 卡通形象（MIT）。';
+    return `<div class="role" data-r="${r.id}" style="--c:${colorOf(r.id)}"><div class="rh"><span class="av${av ? ' img' : ''}" ${av ? `style="background-image:url('${esc(assetUrl(av))}')"${cred?.attribution_text ? ` title="${esc(cred.attribution_text)}"` : ''}` : ''}></span><b>${esc(r.name)}</b>${side ? `<span class="sd ${r.side}">${side}</span>` : ''}${r.persona_id ? '<span class="persona-badge">人格辩手 · 风格模仿</span>' : ''}</div>
+      ${r.persona_source ? `<div class="kit" style="margin-top:6px"><div class="k">🎭 ${esc(r.persona_name)}（${esc(r.persona_en || '')}）· 风格模仿</div><div class="desc">${esc(r.persona_blurb || '')}</div><div class="src">人格 skill 出处 <a href="${esc(r.persona_source.url)}" target="_blank" rel="noopener">${esc(r.persona_source.repo)}</a>${r.persona_source.stars ? `<span class="star">★ ${Number(r.persona_source.stars).toLocaleString()}</span>` : ''} · ${esc(r.persona_source.license)}</div><div class="desc">不代表本人观点，不作事实断言；${credDesc}</div></div>` : ''}
       <div class="ps">${esc(r.persona || '')}</div>${kitHtml(r)}
       ${r.dir ? `<div style="font-size:11.5px;color:var(--muted);margin-top:6px">独立工作目录 <code>${esc(r.dir)}</code>：AGENTS.md、skills/、session.jsonl（持久记忆）</div>` : ''}
       ${withHist ? `<details class="hist" ${mine.length ? 'open' : ''}><summary>发言历史（${mine.length}）</summary>${mine.map((m) => `<div class="tl-item" data-seek="${m.idx}" style="--c:${colorOf(r.id)};grid-template-columns:1fr"><div><div class="hd"><span class="tp" style="--tc:${typeMeta(m.type, mode())[1]}">${esc(typeMeta(m.type, mode())[0])}</span>${m.phase ? esc(m.phase) : ''}</div><div class="sm">${esc(m.short || plain(m.text, 60))}</div>${m.self_review ? `<div class="desc" style="font-size:12px;color:var(--muted)">自省：${esc(plain(m.self_review, 80))}</div>` : ''}</div></div>`).join('')}</details>` : ''}</div>`;

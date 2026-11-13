@@ -1,17 +1,59 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
-<defs><clipPath id="c"><circle cx="60" cy="60" r="58"/></clipPath></defs>
-<circle cx="60" cy="60" r="58" fill="#f3e9d8"/>
-<g clip-path="url(#c)">
-<path d="M16 120 Q22 84 60 82 Q98 84 104 120 Z" fill="#5b6470"/>
-<rect x="78" y="92" width="22" height="15" rx="3" fill="#222"/><circle cx="89" cy="99" r="4.5" fill="#6aa6d8"/>
-<rect x="52" y="66" width="16" height="16" rx="6" fill="#d9a27a"/>
-<ellipse cx="60" cy="50" rx="25" ry="28" fill="#d9a27a"/>
-<ellipse cx="35" cy="52" rx="4" ry="6" fill="#d9a27a"/><ellipse cx="85" cy="52" rx="4" ry="6" fill="#d9a27a"/>
-<path d="M36 40 Q38 22 60 22 Q82 22 84 40 Q72 30 60 30 Q48 30 36 40 Z" fill="#1c1c1c" opacity=".85"/>
-<ellipse cx="50" cy="52" rx="3.2" ry="4" fill="#231c1a"/><ellipse cx="70" cy="52" rx="3.2" ry="4" fill="#231c1a"/>
-<circle cx="51" cy="50.6" r="1.1" fill="#fff"/><circle cx="71" cy="50.6" r="1.1" fill="#fff"/>
-<path d="M44 44 L56 43" stroke="#1c1c1c" stroke-width="2.6" stroke-linecap="round"/><path d="M64 43 L76 44" stroke="#1c1c1c" stroke-width="2.6" stroke-linecap="round"/>
-<circle cx="42" cy="62" r="4" fill="#ff9a9a" opacity=".45"/><circle cx="78" cy="62" r="4" fill="#ff9a9a" opacity=".45"/>
-<path d="M40 60 Q42 78 60 79 Q78 78 80 60 Q72 68 60 69 Q48 68 40 60 Z" fill="#2a2a2a" opacity=".35"/>
-<path d="M53 67 Q60 72 67 67" stroke="#7a3b2e" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-</g></svg>
+  <defs>
+    <clipPath id="c"><circle cx="60" cy="60" r="58"/></clipPath>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#222b38"/>
+      <stop offset="100%" stop-color="#3c4a5e"/>
+    </linearGradient>
+  </defs>
+  <circle cx="60" cy="60" r="58" fill="url(#bg)"/>
+  <g clip-path="url(#c)">
+    <!-- urban dusk skyline silhouette -->
+    <rect x="10" y="70" width="14" height="50" fill="#1b232e" opacity=".7"/>
+    <rect x="94" y="64" width="16" height="56" fill="#1b232e" opacity=".7"/>
+    <circle cx="102" cy="72" r="2" fill="#f59e0b" opacity=".7"/>
+    <!-- sporty red/coral tee + shoulder strap -->
+    <path d="M14 120 Q20 85 60 83 Q100 85 106 120 Z" fill="#c84b44"/>
+    <path d="M46 84 Q60 95 74 84" fill="none" stroke="#9f322c" stroke-width="3"/>
+    <path d="M35 86 L46 120" stroke="#1f242c" stroke-width="6"/>
+    <!-- neck & face (broader square jaw, tanned skin) -->
+    <rect x="51" y="66" width="18" height="18" rx="6" fill="#c98e64"/>
+    <path d="M34 49 Q34 22 60 22 Q86 22 86 49 Q86 73 74 79 Q60 84 46 79 Q34 73 34 49 Z" fill="#d69a6f"/>
+    <!-- ears -->
+    <ellipse cx="33" cy="54" rx="4.2" ry="6.5" fill="#c98e64"/>
+    <ellipse cx="87" cy="54" rx="4.2" ry="6.5" fill="#c98e64"/>
+    <!-- iconic messy curly/fluffy dark hair -->
+    <g fill="#1c1917">
+      <circle cx="38" cy="36" r="10"/>
+      <circle cx="47" cy="25" r="11"/>
+      <circle cx="60" cy="22" r="12"/>
+      <circle cx="74" cy="26" r="11"/>
+      <circle cx="83" cy="36" r="10"/>
+      <circle cx="33" cy="46" r="6.5"/>
+      <circle cx="87" cy="46" r="6.5"/>
+      <path d="M36 39 Q46 27 60 29 Q74 27 84 39 Q73 33 60 35 Q47 33 36 39 Z"/>
+    </g>
+    <!-- eyebrows: one slightly arched skeptical deadpan look -->
+    <path d="M41 44 Q48 40 55 43" stroke="#1c1917" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+    <path d="M65 44 L78 44" stroke="#1c1917" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+    <!-- eyes: slightly hooded calm/deadpan -->
+    <ellipse cx="48.5" cy="51" rx="4.2" ry="3.4" fill="#fff"/>
+    <ellipse cx="71.5" cy="51" rx="4.2" ry="3.4" fill="#fff"/>
+    <circle cx="48.5" cy="51.3" r="2.3" fill="#1e1714"/>
+    <circle cx="71.5" cy="51.3" r="2.3" fill="#1e1714"/>
+    <circle cx="49.3" cy="50.4" r="0.8" fill="#fff"/>
+    <circle cx="72.3" cy="50.4" r="0.8" fill="#fff"/>
+    <!-- nose -->
+    <path d="M60 49 L58 59 Q60 61 63 59" stroke="#a66d48" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    <!-- stubble & goatee shadow -->
+    <path d="M37 60 Q40 80 60 82 Q80 80 83 60 Q75 73 60 74 Q45 73 37 60 Z" fill="#231f1d" opacity=".42"/>
+    <path d="M51 64 Q60 61 69 64" stroke="#231f1d" stroke-width="2.4" opacity=".55" fill="none" stroke-linecap="round"/>
+    <!-- deadpan wry half-smirk -->
+    <path d="M52 69 Q61 71 69 66" stroke="#6f3728" stroke-width="2.3" fill="none" stroke-linecap="round"/>
+    <!-- handheld vlog camera -->
+    <rect x="78" y="88" width="24" height="17" rx="3.5" fill="#18181b" stroke="#52525b" stroke-width="1.2"/>
+    <circle cx="90" cy="96.5" r="5" fill="#3b82f6" stroke="#94a3b8" stroke-width="1.5"/>
+    <circle cx="90" cy="96.5" r="2.2" fill="#0f172a"/>
+    <circle cx="83" cy="91.5" r="1.4" fill="#ef4444"/>
+  </g>
+</svg>

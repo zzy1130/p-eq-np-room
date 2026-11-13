@@ -1,17 +1,47 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
-<defs><clipPath id="c"><circle cx="60" cy="60" r="58"/></clipPath></defs>
-<circle cx="60" cy="60" r="58" fill="#f3e9d8"/>
-<g clip-path="url(#c)">
-<path d="M16 120 Q22 84 60 82 Q98 84 104 120 Z" fill="#ffffff"/>
-<rect x="78" y="94" width="20" height="16" rx="2" fill="#2d3a8c"/><rect x="80" y="96" width="16" height="2" fill="#fff"/>
-<rect x="52" y="66" width="16" height="16" rx="6" fill="#efc39c"/>
-<ellipse cx="60" cy="50" rx="25" ry="28" fill="#efc39c"/>
-<ellipse cx="35" cy="52" rx="4" ry="6" fill="#efc39c"/><ellipse cx="85" cy="52" rx="4" ry="6" fill="#efc39c"/>
-<path d="M35 44 Q35 22 60 21 Q85 22 85 44 Q80 32 60 31 Q40 32 35 44 Z" fill="#151515"/>
-<ellipse cx="50" cy="52" rx="3.2" ry="4" fill="#231c1a"/><ellipse cx="70" cy="52" rx="3.2" ry="4" fill="#231c1a"/>
-<circle cx="51" cy="50.6" r="1.1" fill="#fff"/><circle cx="71" cy="50.6" r="1.1" fill="#fff"/>
-<path d="M44 44 L56 43" stroke="#151515" stroke-width="2.6" stroke-linecap="round"/><path d="M64 43 L76 44" stroke="#151515" stroke-width="2.6" stroke-linecap="round"/>
-<circle cx="42" cy="62" r="4" fill="#ff9a9a" opacity=".45"/><circle cx="78" cy="62" r="4" fill="#ff9a9a" opacity=".45"/>
-<rect x="42" y="46" width="15" height="11" rx="3" fill="none" stroke="#1f1f1f" stroke-width="1.8"/><rect x="63" y="46" width="15" height="11" rx="3" fill="none" stroke="#1f1f1f" stroke-width="1.8"/><path d="M57 51 L63 51" stroke="#1f1f1f" stroke-width="1.8"/>
-<path d="M53 67 Q60 72 67 67" stroke="#7a3b2e" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-</g></svg>
+  <defs>
+    <clipPath id="c"><circle cx="60" cy="60" r="58"/></clipPath>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e5edf7"/>
+      <stop offset="100%" stop-color="#cfdcf0"/>
+    </linearGradient>
+  </defs>
+  <circle cx="60" cy="60" r="58" fill="url(#bg)"/>
+  <g clip-path="url(#c)">
+    <!-- dark navy blazer + crisp white shirt + deep blue tie -->
+    <path d="M14 120 Q20 84 60 82 Q100 84 106 120 Z" fill="#1e293b"/>
+    <path d="M47 82 L60 115 L73 82 Z" fill="#ffffff"/>
+    <path d="M57 86 L63 86 L64 114 L60 119 L56 114 Z" fill="#253b80"/>
+    <!-- slimmer oval face & longer neck -->
+    <rect x="52.5" y="67" width="15" height="17" rx="5" fill="#e6b892"/>
+    <path d="M37 49 Q37 21 60 21 Q83 21 83 49 Q83 73 60 77 Q37 73 37 49 Z" fill="#efc39c"/>
+    <ellipse cx="36" cy="52" rx="3.5" ry="6" fill="#e6b892"/>
+    <ellipse cx="84" cy="52" rx="3.5" ry="6" fill="#e6b892"/>
+    <!-- neat side-parted short hair with higher forehead -->
+    <path d="M36 45 Q35 18 60 17 Q85 18 84 45 Q80 29 63 27 Q47 26 36 45 Z" fill="#141418"/>
+    <path d="M45 25 Q54 27 59 31" stroke="#2d2d35" stroke-width="1.6" fill="none"/>
+    <!-- gentle earnest brows -->
+    <path d="M43 43 Q49 41 55 43" stroke="#18181b" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+    <path d="M65 43 Q71 41 77 43" stroke="#18181b" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+    <!-- thoughtful calm eyes -->
+    <ellipse cx="49" cy="50" rx="3.5" ry="3.8" fill="#fff"/>
+    <ellipse cx="71" cy="50" rx="3.5" ry="3.8" fill="#fff"/>
+    <circle cx="49" cy="50" r="2.2" fill="#1e1714"/>
+    <circle cx="71" cy="50" r="2.2" fill="#1e1714"/>
+    <circle cx="49.8" cy="49.1" r="0.8" fill="#fff"/>
+    <circle cx="71.8" cy="49.1" r="0.8" fill="#fff"/>
+    <!-- thin dark-rimmed scholar glasses -->
+    <rect x="40.5" y="45" width="16.5" height="10.5" rx="2.5" fill="rgba(255,255,255,0.14)" stroke="#1f2937" stroke-width="1.6"/>
+    <rect x="63" y="45" width="16.5" height="10.5" rx="2.5" fill="rgba(255,255,255,0.14)" stroke="#1f2937" stroke-width="1.6"/>
+    <path d="M57 49.5 L63 49.5" stroke="#1f2937" stroke-width="1.6"/>
+    <!-- nose -->
+    <path d="M60 48 L59 58 Q60 59.5 62 58.5" stroke="#c08b65" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+    <!-- calm warm smile -->
+    <path d="M53 65 Q60 70 67 65" stroke="#7c3e32" stroke-width="2.1" fill="none" stroke-linecap="round"/>
+    <!-- criminal law book -->
+    <rect x="77" y="90" width="22" height="24" rx="2" fill="#7f1d1d" stroke="#450a0a" stroke-width="1"/>
+    <rect x="79" y="92" width="18" height="3" fill="#fef3c7" opacity=".85"/>
+    <line x1="82" y1="99" x2="94" y2="99" stroke="#fef3c7" stroke-width="1.4" opacity=".7"/>
+    <line x1="82" y1="104" x2="92" y2="104" stroke="#fef3c7" stroke-width="1.4" opacity=".7"/>
+  </g>
+</svg>

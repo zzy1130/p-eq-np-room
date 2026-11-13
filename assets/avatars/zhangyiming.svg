@@ -1,17 +1,52 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
-<defs><clipPath id="c"><circle cx="60" cy="60" r="58"/></clipPath></defs>
-<circle cx="60" cy="60" r="58" fill="#f3e9d8"/>
-<g clip-path="url(#c)">
-<path d="M16 120 Q22 84 60 82 Q98 84 104 120 Z" fill="#6b7280"/>
-<path d="M38 86 Q60 100 82 86" stroke="#d1d5db" stroke-width="4" fill="none"/>
-<rect x="52" y="66" width="16" height="16" rx="6" fill="#f0c7a1"/>
-<ellipse cx="60" cy="50" rx="25" ry="28" fill="#f0c7a1"/>
-<ellipse cx="35" cy="52" rx="4" ry="6" fill="#f0c7a1"/><ellipse cx="85" cy="52" rx="4" ry="6" fill="#f0c7a1"/>
-<path d="M35 44 Q35 22 60 21 Q85 22 85 44 Q80 32 60 31 Q40 32 35 44 Z" fill="#161616"/>
-<ellipse cx="50" cy="52" rx="3.2" ry="4" fill="#231c1a"/><ellipse cx="70" cy="52" rx="3.2" ry="4" fill="#231c1a"/>
-<circle cx="51" cy="50.6" r="1.1" fill="#fff"/><circle cx="71" cy="50.6" r="1.1" fill="#fff"/>
-<path d="M44 44 L56 43" stroke="#161616" stroke-width="2.6" stroke-linecap="round"/><path d="M64 43 L76 44" stroke="#161616" stroke-width="2.6" stroke-linecap="round"/>
-<circle cx="42" cy="62" r="4" fill="#ff9a9a" opacity=".45"/><circle cx="78" cy="62" r="4" fill="#ff9a9a" opacity=".45"/>
-<rect x="42" y="46" width="15" height="11" rx="3" fill="none" stroke="#1f1f1f" stroke-width="1.8"/><rect x="63" y="46" width="15" height="11" rx="3" fill="none" stroke="#1f1f1f" stroke-width="1.8"/><path d="M57 51 L63 51" stroke="#1f1f1f" stroke-width="1.8"/>
-<path d="M53 67 Q60 72 67 67" stroke="#7a3b2e" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-</g></svg>
+  <defs>
+    <clipPath id="c"><circle cx="60" cy="60" r="58"/></clipPath>
+    <radialGradient id="bg" cx="50%" cy="38%" r="65%">
+      <stop offset="0%" stop-color="#edf2f7"/>
+      <stop offset="100%" stop-color="#d4dee9"/>
+    </radialGradient>
+  </defs>
+  <circle cx="60" cy="60" r="58" fill="url(#bg)"/>
+  <g clip-path="url(#c)">
+    <!-- dark casual polo shirt -->
+    <path d="M13 120 Q19 84 60 82 Q101 84 107 120 Z" fill="#1f2937"/>
+    <!-- polo placket & light inner tee -->
+    <path d="M51 82 L60 95 L69 82 Z" fill="#e5e7eb"/>
+    <path d="M45 82 L55 96 L60 91 L52 82 Z" fill="#2d3b4e"/>
+    <path d="M75 82 L65 96 L60 91 L68 82 Z" fill="#2d3b4e"/>
+    <rect x="57.5" y="92" width="5" height="16" rx="1.5" fill="#283548"/>
+    <circle cx="60" cy="96" r="1.1" fill="#9ca3af"/>
+    <circle cx="60" cy="102" r="1.1" fill="#9ca3af"/>
+    <!-- neck & rounder face -->
+    <rect x="51" y="67" width="18" height="17" rx="6" fill="#e2b48d"/>
+    <ellipse cx="60" cy="76" rx="9" ry="3.5" fill="#d4a37a" opacity=".55"/>
+    <path d="M33 50 Q33 23 60 23 Q87 23 87 50 Q87 74 60 77.5 Q33 74 33 50 Z" fill="#f0c7a1"/>
+    <!-- ears -->
+    <ellipse cx="32.5" cy="52" rx="3.8" ry="6" fill="#e5b891"/>
+    <ellipse cx="87.5" cy="52" rx="3.8" ry="6" fill="#e5b891"/>
+    <!-- neat short black hair -->
+    <path d="M32 47 Q31 19 60 18 Q89 19 88 47 Q84 31 67 29 Q50 28 32 47 Z" fill="#161616"/>
+    <path d="M43 26 Q58 22 73 27" stroke="#2c2c30" stroke-width="1.5" fill="none"/>
+    <!-- gentle relaxed eyebrows -->
+    <path d="M42 43.5 Q48.5 41.5 55 43" stroke="#1c1c1e" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <path d="M65 43 Q71.5 41.5 78 43.5" stroke="#1c1c1e" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <!-- calm eyes -->
+    <ellipse cx="48.5" cy="50.5" rx="3.4" ry="3.6" fill="#fff"/>
+    <ellipse cx="71.5" cy="50.5" rx="3.4" ry="3.6" fill="#fff"/>
+    <circle cx="48.5" cy="50.7" r="2.1" fill="#1c1613"/>
+    <circle cx="71.5" cy="50.7" r="2.1" fill="#1c1613"/>
+    <circle cx="49.3" cy="49.8" r="0.8" fill="#fff"/>
+    <circle cx="72.3" cy="49.8" r="0.8" fill="#fff"/>
+    <!-- thin-frame rectangular glasses -->
+    <rect x="40" y="45.2" width="17" height="10.8" rx="2.4" fill="rgba(255,255,255,0.12)" stroke="#27272a" stroke-width="1.35"/>
+    <rect x="63" y="45.2" width="17" height="10.8" rx="2.4" fill="rgba(255,255,255,0.12)" stroke="#27272a" stroke-width="1.35"/>
+    <path d="M57 50 L63 50" stroke="#27272a" stroke-width="1.35"/>
+    <path d="M33.5 49.8 L40 49.8 M80 49.8 L86.5 49.8" stroke="#27272a" stroke-width="1.2"/>
+    <line x1="42" y1="47" x2="45.5" y2="50.5" stroke="#fff" stroke-width="1" opacity=".45" stroke-linecap="round"/>
+    <line x1="65" y1="47" x2="68.5" y2="50.5" stroke="#fff" stroke-width="1" opacity=".45" stroke-linecap="round"/>
+    <!-- subtle nose -->
+    <path d="M60 49 L59 58 Q60 59.5 62 58.5" stroke="#c58f68" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <!-- mild gentle smile -->
+    <path d="M53.5 65.5 Q60 69.5 66.5 65.5" stroke="#854537" stroke-width="1.9" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>

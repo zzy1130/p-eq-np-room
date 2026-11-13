@@ -7,16 +7,16 @@
    "blurb": "第一性原理 + 白痴指数，张口就算成本，爱下狠赌注",
    "kit": "persona-musk",
    "style_imitation": true,
-   "avatar": "assets/avatars/musk.svg",
+   "avatar": "assets/avatars/photo/musk.jpg",
    "look": {
     "skin": "#f2c9a6",
-    "hair": "#4a3426",
+    "hair": "#3b291e",
     "hair_style": "side",
     "beard": null,
     "glasses": null,
     "outfit": "tee",
-    "outfit_color": "#16161a",
-    "accent": "#c9c9d0",
+    "outfit_color": "#141418",
+    "accent": "#e2e4ea",
     "accessory": "x-logo",
     "build": 1.08
    },
@@ -27,6 +27,15 @@
     "commit": "65af7c9a5395cc996d17f55b5bde37e6ed72cf4f",
     "stars": 572,
     "license": "MIT"
+   },
+   "avatar_credit": {
+    "type": "photo",
+    "source_url": "https://upload.wikimedia.org/wikipedia/commons/3/34/Elon_Musk_Royal_Society_%28crop2%29.jpg",
+    "file_page": "https://commons.wikimedia.org/wiki/File%3AElon_Musk_Royal_Society_%28crop2%29.jpg",
+    "author": "Debbie Rowe",
+    "license": "CC BY-SA 3.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+    "attribution_text": "Debbie Rowe / CC BY-SA 3.0"
    }
   },
   {
@@ -36,13 +45,13 @@
    "blurb": "只问不答的提问术，先让你承认自己不知道",
    "kit": "persona-socrates",
    "style_imitation": true,
-   "avatar": "assets/avatars/socrates.svg",
+   "avatar": "assets/avatars/photo/socrates.jpg",
    "look": {
     "skin": "#d9a77e",
-    "hair": "#eeeeee",
+    "hair": "#efefef",
     "hair_style": "bald-ring",
     "beard": "full",
-    "beard_color": "#f2f2f2",
+    "beard_color": "#f4f4f4",
     "glasses": null,
     "outfit": "robe",
     "outfit_color": "#efe6d2",
@@ -57,6 +66,15 @@
     "commit": "d9d5614b1b3221c74c8b6d1afbfffa50f5fe6a56",
     "stars": 16,
     "license": "MIT"
+   },
+   "avatar_credit": {
+    "type": "photo",
+    "source_url": "https://upload.wikimedia.org/wikipedia/commons/a/a4/Socrates_Louvre.jpg",
+    "file_page": "https://commons.wikimedia.org/wiki/File%3ASocrates_Louvre.jpg",
+    "author": "Copy of Lysippos (?)",
+    "license": "Public domain",
+    "license_url": "https://creativecommons.org/publicdomain/mark/1.0/",
+    "attribution_text": "Copy of Lysippos (?) / Public domain"
    }
   },
   {
@@ -68,16 +86,16 @@
    "style_imitation": true,
    "avatar": "assets/avatars/zhangxuefeng.svg",
    "look": {
-    "skin": "#efc39c",
-    "hair": "#141414",
+    "skin": "#f1c49e",
+    "hair": "#151517",
     "hair_style": "short",
     "beard": null,
     "glasses": "rect",
     "outfit": "jacket",
-    "outfit_color": "#20242c",
-    "accent": "#3a4250",
+    "outfit_color": "#1f2937",
+    "accent": "#374151",
     "accessory": "mic",
-    "build": 1.1
+    "build": 1.14
    },
    "source": {
     "repo": "alchaincyf/zhangxuefeng-skill",
@@ -86,6 +104,15 @@
     "commit": "38bbd944e2ecbd7ec0232a7448fcb27ab4710da0",
     "stars": 10755,
     "license": "MIT"
+   },
+   "avatar_credit": {
+    "type": "cartoon",
+    "source_url": null,
+    "file_page": null,
+    "author": "本项目原创卡通 SVG（基于公开外形特征）",
+    "license": "MIT",
+    "license_url": "https://opensource.org/licenses/MIT",
+    "attribution_text": "Wikimedia Commons 无自由授权照片（中文维基仅为非自由合理使用），改用高辨识度原创 SVG 卡通"
    }
   },
   {
@@ -97,17 +124,17 @@
    "style_imitation": true,
    "avatar": "assets/avatars/fengge.svg",
    "look": {
-    "skin": "#d9a27a",
-    "hair": "#1c1c1c",
-    "hair_style": "buzz",
+    "skin": "#d69a6f",
+    "hair": "#1c1917",
+    "hair_style": "curly",
     "beard": "stubble",
-    "beard_color": "#2a2a2a",
+    "beard_color": "#231f1d",
     "glasses": null,
     "outfit": "tee",
-    "outfit_color": "#5b6470",
-    "accent": "#9aa3ad",
+    "outfit_color": "#c84b44",
+    "accent": "#1f242c",
     "accessory": "camera",
-    "build": 1.15
+    "build": 1.14
    },
    "source": {
     "repo": "YixiaJack/feng-ge-skill",
@@ -116,6 +143,15 @@
     "commit": "9416674e9a2682bbcda6f3c6fade3f3f69ff6328",
     "stars": 476,
     "license": "MIT"
+   },
+   "avatar_credit": {
+    "type": "cartoon",
+    "source_url": null,
+    "file_page": null,
+    "author": "本项目原创卡通 SVG（基于公开外形特征）",
+    "license": "MIT",
+    "license_url": "https://opensource.org/licenses/MIT",
+    "attribution_text": "Wikimedia Commons 现有文件属权属待核实/疑似非原始拍摄，改用高辨识度原创 SVG 卡通"
    }
   },
   {
@@ -125,19 +161,19 @@
    "blurb": "现实扭曲力场，极简与品味，非黑即白地砍掉平庸",
    "kit": "persona-jobs",
    "style_imitation": true,
-   "avatar": "assets/avatars/jobs.svg",
+   "avatar": "assets/avatars/photo/jobs.jpg",
    "look": {
     "skin": "#efc6a3",
-    "hair": "#5a5650",
+    "hair": "#6b665f",
     "hair_style": "short-thin",
     "beard": "stubble",
-    "beard_color": "#6b665f",
+    "beard_color": "#78726a",
     "glasses": "round",
     "outfit": "turtleneck",
     "outfit_color": "#121212",
-    "accent": "#3d5a80",
+    "accent": "#9aa0a6",
     "accessory": "jeans",
-    "build": 0.98
+    "build": 0.96
    },
    "source": {
     "repo": "alchaincyf/steve-jobs-skill",
@@ -146,6 +182,15 @@
     "commit": "1673f247560c528d2541a8eba86e094584b9d941",
     "stars": 981,
     "license": "MIT"
+   },
+   "avatar_credit": {
+    "type": "photo",
+    "source_url": "https://upload.wikimedia.org/wikipedia/commons/b/b9/Steve_Jobs_Headshot_2010-CROP.jpg",
+    "file_page": "https://commons.wikimedia.org/wiki/File%3ASteve_Jobs_Headshot_2010-CROP.jpg",
+    "author": "Matthew Yohe (talk)",
+    "license": "CC BY-SA 3.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/3.0",
+    "attribution_text": "Matthew Yohe (talk) / CC BY-SA 3.0"
    }
   },
   {
@@ -155,7 +200,7 @@
    "blurb": "反过来想，多元思维模型，毒舌拆穿激励偏差",
    "kit": "persona-munger",
    "style_imitation": true,
-   "avatar": "assets/avatars/munger.svg",
+   "avatar": "assets/avatars/photo/munger.jpg",
    "look": {
     "skin": "#f0c8ae",
     "hair": "#e8e8e8",
@@ -166,7 +211,7 @@
     "outfit_color": "#4b5563",
     "accent": "#7a1f2b",
     "accessory": "tie",
-    "build": 1.0
+    "build": 1.02
    },
    "source": {
     "repo": "alchaincyf/munger-skill",
@@ -175,6 +220,15 @@
     "commit": "7f98358457d00d289e5fdc7a874f0a9678fc8587",
     "stars": 401,
     "license": "MIT"
+   },
+   "avatar_credit": {
+    "type": "photo",
+    "source_url": "https://upload.wikimedia.org/wikipedia/commons/b/bb/Charlie_Munger_2_%28cropped%29.jpg",
+    "file_page": "https://commons.wikimedia.org/wiki/File%3ACharlie_Munger_2_%28cropped%29.jpg",
+    "author": "Nick Webb",
+    "license": "CC BY 2.0",
+    "license_url": "https://creativecommons.org/licenses/by/2.0",
+    "attribution_text": "Nick Webb / CC BY 2.0"
    }
   },
   {
@@ -184,17 +238,18 @@
    "blurb": "讲不清就是没懂，好奇心爆棚，最爱拆穿“货物崇拜”",
    "kit": "persona-feynman",
    "style_imitation": true,
-   "avatar": "assets/avatars/feynman.svg",
+   "avatar": "assets/avatars/photo/feynman.jpg",
    "look": {
     "skin": "#f1c9a5",
-    "hair": "#8a7a6a",
+    "hair": "#6f5848",
     "hair_style": "wavy",
     "beard": null,
     "glasses": null,
     "outfit": "shirt",
     "outfit_color": "#f5f5f0",
-    "accent": "#c08a3e",
+    "accent": "#2a2d34",
     "accessory": "bongo",
+    "tie_color": "#2a2d34",
     "build": 1.0
    },
    "source": {
@@ -204,6 +259,15 @@
     "commit": "b804a7fba592091d5d44844ab7bb75ca26bbfc2a",
     "stars": 318,
     "license": "MIT"
+   },
+   "avatar_credit": {
+    "type": "photo",
+    "source_url": "https://upload.wikimedia.org/wikipedia/commons/0/06/Richard_Feynman_1959.png",
+    "file_page": "https://commons.wikimedia.org/wiki/File%3ARichard_Feynman_1959.png",
+    "author": "Unknown author",
+    "license": "Public domain",
+    "license_url": "https://creativecommons.org/publicdomain/mark/1.0/",
+    "attribution_text": "Unknown author / Public domain"
    }
   },
   {
@@ -213,7 +277,7 @@
    "blurb": "谈判与权力视角，极限施压，句句都是“最好的交易”",
    "kit": "persona-trump",
    "style_imitation": true,
-   "avatar": "assets/avatars/trump.svg",
+   "avatar": "assets/avatars/photo/trump.jpg",
    "look": {
     "skin": "#f2b48a",
     "hair": "#e7c26b",
@@ -221,10 +285,10 @@
     "beard": null,
     "glasses": null,
     "outfit": "suit",
-    "outfit_color": "#1c2541",
-    "accent": "#c1121f",
+    "outfit_color": "#17213a",
+    "accent": "#cc1420",
     "accessory": "long-tie",
-    "build": 1.18
+    "build": 1.2
    },
    "source": {
     "repo": "alchaincyf/trump-skill",
@@ -233,6 +297,15 @@
     "commit": "8c489b253efbc1ddab67e919820d855b477dd76f",
     "stars": 275,
     "license": "MIT"
+   },
+   "avatar_credit": {
+    "type": "photo",
+    "source_url": "https://upload.wikimedia.org/wikipedia/commons/5/53/Donald_Trump_official_portrait_%28cropped%29.jpg",
+    "file_page": "https://commons.wikimedia.org/wiki/File%3ADonald_Trump_official_portrait_%28cropped%29.jpg",
+    "author": "Shealeah Craighead",
+    "license": "Public domain",
+    "license_url": "https://creativecommons.org/publicdomain/mark/1.0/",
+    "attribution_text": "Shealeah Craighead / Public domain"
    }
   },
   {
@@ -242,16 +315,17 @@
    "blurb": "反脆弱与黑天鹅，痛骂“不承担风险的专家”",
    "kit": "persona-taleb",
    "style_imitation": true,
-   "avatar": "assets/avatars/taleb.svg",
+   "avatar": "assets/avatars/photo/taleb.jpg",
    "look": {
     "skin": "#d8a985",
-    "hair": "#9a9a9a",
+    "hair": "#8e8e8e",
     "hair_style": "bald",
     "beard": "short",
-    "beard_color": "#a3a3a3",
+    "beard_color": "#9a9a9a",
     "glasses": null,
     "outfit": "jacket",
-    "outfit_color": "#2b2b2b",
+    "outfit_color": "#2b2d32",
+    "inner_color": "#121214",
     "accent": "#8c7b5b",
     "accessory": null,
     "build": 1.12
@@ -263,6 +337,15 @@
     "commit": "6045c4d8ad1ea3a6e4b0872421c755c36782d1c8",
     "stars": 133,
     "license": "MIT"
+   },
+   "avatar_credit": {
+    "type": "photo",
+    "source_url": "https://upload.wikimedia.org/wikipedia/commons/0/0e/Nassim_Nicholas_Taleb_DLD_2009-012_%28cropped%29.jpg",
+    "file_page": "https://commons.wikimedia.org/wiki/File%3ANassim_Nicholas_Taleb_DLD_2009-012_%28cropped%29.jpg",
+    "author": "nrkbeta",
+    "license": "CC BY-SA 2.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/2.0",
+    "attribution_text": "nrkbeta / CC BY-SA 2.0"
    }
   },
   {
@@ -272,19 +355,19 @@
    "blurb": "杠杆、特定知识与长期复利，金句密度极高",
    "kit": "persona-naval",
    "style_imitation": true,
-   "avatar": "assets/avatars/naval.svg",
+   "avatar": "assets/avatars/photo/naval.jpg",
    "look": {
     "skin": "#c99a72",
-    "hair": "#1d1d1d",
-    "hair_style": "short",
+    "hair": "#1c1a19",
+    "hair_style": "wavy-short",
     "beard": "stubble",
-    "beard_color": "#2a2a2a",
+    "beard_color": "#242120",
     "glasses": null,
     "outfit": "tee",
-    "outfit_color": "#2f3b4a",
+    "outfit_color": "#2b3644",
     "accent": "#9fb3c8",
     "accessory": null,
-    "build": 0.95
+    "build": 0.96
    },
    "source": {
     "repo": "alchaincyf/naval-skill",
@@ -293,6 +376,15 @@
     "commit": "b7600569776be0bd880e8457b1eae42df9f1d3e5",
     "stars": 271,
     "license": "MIT"
+   },
+   "avatar_credit": {
+    "type": "photo",
+    "source_url": "https://upload.wikimedia.org/wikipedia/commons/7/73/Naval_Ravikant_in_2011_%28cropped%29.jpg",
+    "file_page": "https://commons.wikimedia.org/wiki/File%3ANaval_Ravikant_in_2011_%28cropped%29.jpg",
+    "author": "kris krüg",
+    "license": "CC BY-SA 2.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/2.0",
+    "attribution_text": "kris krüg / CC BY-SA 2.0"
    }
   },
   {
@@ -305,15 +397,16 @@
    "avatar": "assets/avatars/luoxiang.svg",
    "look": {
     "skin": "#efc39c",
-    "hair": "#151515",
+    "hair": "#141418",
     "hair_style": "short",
     "beard": null,
-    "glasses": "rect",
-    "outfit": "shirt",
-    "outfit_color": "#ffffff",
-    "accent": "#2d3a8c",
+    "glasses": "rect-thin",
+    "outfit": "suit",
+    "outfit_color": "#1e293b",
+    "accent": "#7f1d1d",
     "accessory": "book",
-    "build": 1.0
+    "tie_color": "#253b80",
+    "build": 0.98
    },
    "source": {
     "repo": "YixiaJack/luo-xiang-skill",
@@ -322,6 +415,15 @@
     "commit": "bf8eba465f54d00edb7f511d17363151a5f064e1",
     "stars": 15,
     "license": "MIT"
+   },
+   "avatar_credit": {
+    "type": "cartoon",
+    "source_url": null,
+    "file_page": null,
+    "author": "本项目原创卡通 SVG（基于公开外形特征）",
+    "license": "MIT",
+    "license_url": "https://opensource.org/licenses/MIT",
+    "attribution_text": "Wikimedia Commons 与维基百科均无自由授权照片，改用高辨识度原创 SVG 卡通"
    }
   },
   {
@@ -331,7 +433,7 @@
    "blurb": "匕首投枪式反讽，专剥“看客”和“面子”",
    "kit": "persona-luxun",
    "style_imitation": true,
-   "avatar": "assets/avatars/luxun.svg",
+   "avatar": "assets/avatars/photo/luxun.jpg",
    "look": {
     "skin": "#e3b48d",
     "hair": "#121212",
@@ -340,8 +442,8 @@
     "beard_color": "#121212",
     "glasses": null,
     "outfit": "changshan",
-    "outfit_color": "#4a4f57",
-    "accent": "#2b2f35",
+    "outfit_color": "#3f454e",
+    "accent": "#23272e",
     "accessory": "pipe",
     "build": 0.95
    },
@@ -352,6 +454,15 @@
     "commit": "2984cd1980e5b9c09db5c18116be9634bd53a580",
     "stars": 8,
     "license": "MIT"
+   },
+   "avatar_credit": {
+    "type": "photo",
+    "source_url": "https://upload.wikimedia.org/wikipedia/commons/4/48/LuXun1930.jpg",
+    "file_page": "https://commons.wikimedia.org/wiki/File%3ALuXun1930.jpg",
+    "author": "Unknown author",
+    "license": "Public domain",
+    "license_url": "https://creativecommons.org/publicdomain/mark/1.0/",
+    "attribution_text": "Unknown author / Public domain"
    }
   },
   {
@@ -361,7 +472,7 @@
    "blurb": "重估一切价值，锤子哲学，向“群氓道德”开火",
    "kit": "persona-nietzsche",
    "style_imitation": true,
-   "avatar": "assets/avatars/nietzsche.svg",
+   "avatar": "assets/avatars/photo/nietzsche.jpg",
    "look": {
     "skin": "#f0c9a8",
     "hair": "#5a4232",
@@ -370,8 +481,8 @@
     "beard_color": "#4a3426",
     "glasses": null,
     "outfit": "suit",
-    "outfit_color": "#2a2622",
-    "accent": "#e9e2d0",
+    "outfit_color": "#26221e",
+    "accent": "#f0eadb",
     "accessory": null,
     "build": 1.0
    },
@@ -382,6 +493,15 @@
     "commit": "0bff80083250dd520176f1269432b2457369f094",
     "stars": 3,
     "license": "MIT"
+   },
+   "avatar_credit": {
+    "type": "photo",
+    "source_url": "https://upload.wikimedia.org/wikipedia/commons/2/23/Nietzsche1882.jpg",
+    "file_page": "https://commons.wikimedia.org/wiki/File%3ANietzsche1882.jpg",
+    "author": "Gustav-Adolf Schultze (d. 1897)",
+    "license": "Public domain",
+    "license_url": "https://creativecommons.org/publicdomain/mark/1.0/",
+    "attribution_text": "Gustav-Adolf Schultze (d. 1897) / Public domain"
    }
   },
   {
@@ -391,19 +511,19 @@
    "blurb": "正名、中庸、因材施教，一句“君子不器”",
    "kit": "persona-confucius",
    "style_imitation": true,
-   "avatar": "assets/avatars/confucius.svg",
+   "avatar": "assets/avatars/photo/confucius.jpg",
    "look": {
     "skin": "#e6b98f",
     "hair": "#3a3a3a",
     "hair_style": "topknot",
     "beard": "long",
-    "beard_color": "#5b5b5b",
+    "beard_color": "#4f4f4f",
     "glasses": null,
     "outfit": "robe",
     "outfit_color": "#b8935a",
     "accent": "#5b3a1a",
     "accessory": "scholar-hat",
-    "build": 1.05
+    "build": 1.06
    },
    "source": {
     "repo": "nuwa-skills/kongzi-skill",
@@ -412,6 +532,15 @@
     "commit": "5c341fc7c9c3ea5898a0b8b0f3b318c19a023afd",
     "stars": 3,
     "license": "MIT"
+   },
+   "avatar_credit": {
+    "type": "photo",
+    "source_url": "https://upload.wikimedia.org/wikipedia/commons/f/f2/Cropped_version_of_Confucius_Portrait%2C_Kongzi_%28Confucius%29_Family_Mansion%2C_Qufu_%2813044335945%29.jpg",
+    "file_page": "https://commons.wikimedia.org/wiki/File%3ACropped_version_of_Confucius_Portrait%2C_Kongzi_%28Confucius%29_Family_Mansion%2C_Qufu_%2813044335945%29.jpg",
+    "author": "Unknown author",
+    "license": "Public domain",
+    "license_url": "https://creativecommons.org/publicdomain/mark/1.0/",
+    "attribution_text": "Unknown author / Public domain"
    }
   },
   {
@@ -421,18 +550,18 @@
    "blurb": "创业者视角的短文式论证，做没人做的东西",
    "kit": "persona-paulgraham",
    "style_imitation": true,
-   "avatar": "assets/avatars/paulgraham.svg",
+   "avatar": "assets/avatars/photo/paulgraham.jpg",
    "look": {
     "skin": "#f2cdb0",
-    "hair": "#bdbdbd",
-    "hair_style": "short-thin",
+    "hair": "#6e6058",
+    "hair_style": "short",
     "beard": null,
     "glasses": null,
-    "outfit": "shirt",
-    "outfit_color": "#7da3c8",
-    "accent": "#3b5b7a",
+    "outfit": "polo",
+    "outfit_color": "#c92a2a",
+    "accent": "#ffffff",
     "accessory": null,
-    "build": 1.0
+    "build": 1.02
    },
    "source": {
     "repo": "alchaincyf/paul-graham-skill",
@@ -441,6 +570,15 @@
     "commit": "a47e900089c6c8428aed7371d8dd29ea5618e7d2",
     "stars": 107,
     "license": "MIT"
+   },
+   "avatar_credit": {
+    "type": "photo",
+    "source_url": "https://upload.wikimedia.org/wikipedia/commons/c/c7/Paul_Graham_TechCrunch_Disrupt_New_York_May_2011.jpg",
+    "file_page": "https://commons.wikimedia.org/wiki/File%3APaul_Graham_TechCrunch_Disrupt_New_York_May_2011.jpg",
+    "author": "Charles Eshelman / Getty Images for AOL（via TechCrunch, Flickr）",
+    "license": "CC BY 2.0",
+    "license_url": "https://creativecommons.org/licenses/by/2.0",
+    "attribution_text": "Charles Eshelman / Getty Images for AOL（via TechCrunch, Flickr）· CC BY 2.0"
    }
   },
   {
@@ -456,10 +594,10 @@
     "hair": "#161616",
     "hair_style": "short",
     "beard": null,
-    "glasses": "rect",
-    "outfit": "hoodie",
-    "outfit_color": "#6b7280",
-    "accent": "#d1d5db",
+    "glasses": "rect-thin",
+    "outfit": "polo",
+    "outfit_color": "#1f2937",
+    "accent": "#e5e7eb",
     "accessory": null,
     "build": 1.0
    },
@@ -470,8 +608,17 @@
     "commit": "ed3b9777f92e3b2c911af390024f247433cb1e4c",
     "stars": 182,
     "license": "MIT"
+   },
+   "avatar_credit": {
+    "type": "cartoon",
+    "source_url": null,
+    "file_page": null,
+    "author": "本项目原创卡通 SVG（基于公开外形特征）",
+    "license": "MIT",
+    "license_url": "https://opensource.org/licenses/MIT",
+    "attribution_text": "Wikimedia Commons 原文件（The_CEO_Magazine_Cover.jpg）为杂志封面且作者/来源仅标注 Own work 权属不清，已撤下并改用高辨识度原创 SVG 卡通"
    }
   }
  ],
- "note": "人格辩手：skill 原文来自 GitHub 开源仓库（均为 MIT），一律「风格模仿」，不得冒用真人身份做事实断言；头像为程序生成的卡通形象（assets/avatars/*.svg），未使用任何照片。"
+ "note": "人格辩手：skill 原文来自 GitHub 开源仓库（均为 MIT），一律「风格模仿」，不得冒用真人身份做事实断言；头像优先采用 Wikimedia Commons 自由授权真人/历史照片（Public domain / CC BY / CC BY-SA），其余无合格自由授权照片者采用高辨识度原创 SVG 卡通。"
 }

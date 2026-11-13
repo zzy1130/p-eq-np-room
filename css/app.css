@@ -319,7 +319,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .pside.aff { background: #dde7fb; color: #1d4fa8; } .pside.neg { background: #fde2e0; color: #9b2a22; }
 .pslot { display: grid; grid-template-columns: 44px 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left;
   border: 1.5px dashed #cdbfae; background: #fffdf8; border-radius: 12px; padding: 6px 8px; min-height: 58px; }
-.pslot img, .pslot .auto { grid-row: 1 / 3; width: 44px; height: 44px; border-radius: 50%; }
+.pslot img, .pslot .auto { grid-row: 1 / 3; width: 44px; height: 44px; border-radius: 50%; object-fit: cover; object-position: center 20%; }
 .pslot .auto { display: grid; place-items: center; background: #efe7da; color: #8a7d70; font-weight: 800; font-size: 13px; }
 .pslot b { font-size: 11.5px; color: var(--muted); } .pslot span { font-size: 14px; font-weight: 700; }
 .pslot.on { border-style: solid; border-color: var(--accent); background: #fff3e9; }
@@ -331,11 +331,13 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .pgrid.small { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); max-height: 260px; overflow: auto; padding: 2px; }
 .pcard { display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center; border: 1.5px solid var(--line); background: #fff;
   border-radius: 12px; padding: 8px 6px; font-size: 12px; line-height: 1.35; }
-.pcard img, .pcard .autoav { width: 64px; height: 64px; border-radius: 50%; }
+.pcard img, .pcard .autoav { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; object-position: center 20%; }
 .pgrid.small .pcard img { width: 48px; height: 48px; }
 .pcard .autoav { display: grid; place-items: center; background: #efe7da; color: #8a7d70; font-weight: 800; }
 .pcard b { font-size: 14px; } .pcard span { color: var(--muted); font-size: 11.5px; }
 .pcard .src { font-size: 10.5px; color: #1d4fa8; text-decoration: none; word-break: break-all; }
+.pcard .avcred { font-size: 10px; color: var(--muted); line-height: 1.25; word-break: break-word; }
+.pcard a.avcred { color: #1d4fa8; text-decoration: none; } .pcard a.avcred:hover { text-decoration: underline; }
 .pcard.on { border-color: var(--accent); background: #fff3e9; box-shadow: 0 0 0 2px rgba(226,101,58,.25); }
 .pcard:disabled { opacity: .35; cursor: not-allowed; }
 .testrow { background: #eef5ea; color: #2f6b2a; }
