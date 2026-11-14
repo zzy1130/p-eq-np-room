@@ -1455,6 +1455,7 @@ export function createStage(container, overlayRoot, opts = {}) {
   let compactInput = null;
   let userCamOverride = null;   // null = follow viewport compact rule, boolean = explicit #camToggle choice
   let camControl = true;
+  let releaseHold = false;
   let downAt = null;
   const drag = { id: null, y0: 0, y: 0, t: 0, v: 0, on: false, pts: new Set(), fling: 0 };
   const scrollBy = (dy) => { if (dy) opts.onScroll?.(dy); };
@@ -1472,17 +1473,20 @@ export function createStage(container, overlayRoot, opts = {}) {
       controls.enabled = true;
       controls.enableRotate = true;
       controls.enableZoom = true;
-      controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
-      controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+      controls.enablePan = true;    // pan: two-finger drag (DOLLY_PAN), right-drag, or Shift/Ctrl/⌘ + left-drag (OrbitControls 0.170)
+      controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+      controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
       renderer.domElement.style.touchAction = 'none';
     } else {
       controls.enabled = false;
       controls.enableRotate = false;
       controls.enableZoom = false;
+      controls.enablePan = false;
       controls.touches = { ONE: null, TWO: null };
       controls.mouseButtons = { LEFT: null, MIDDLE: null, RIGHT: null };
       renderer.domElement.style.touchAction = 'none';
     }
+    if (changed && !camControl) releaseHold = true;   // control off -> auto framing resumes (applied in stepFrame; `cam` is declared later)
     if (notify || changed) opts.onCamControlChange?.(camControl);
   }
   function applyInputMode() { syncInputMode(false); }
@@ -2438,7 +2442,8 @@ export function createStage(container, overlayRoot, opts = {}) {
 
   // ------------------------------------------------ picking (tap = pointerup within 6 px of pointerdown)
   const raycaster = new THREE.Raycaster(), ndc = new THREE.Vector2();
-  const markUser = () => { cam.userUntil = performance.now() / 1000 + 25; controls.autoRotate = false; };
+  // a real gesture holds the user's view (no 25 s snap-back) until 复位 / control off / next scene setup
+  const markUser = () => { cam.userUntil = Infinity; controls.autoRotate = false; };
   controls.addEventListener('start', markUser);   // real gestures only (drag / pinch / wheel), not taps
   renderer.domElement.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
   renderer.domElement.addEventListener('pointerup', (e) => {
@@ -2486,6 +2491,7 @@ export function createStage(container, overlayRoot, opts = {}) {
     rim.intensity = damp(rim.intensity, light0.rim, 3, k);
     scene.environmentIntensity = damp(scene.environmentIntensity ?? light0.env, light0.env * dim, 3, k);
     for (const [id, o] of overlay) o.tag.classList.toggle('dim', !!sb && id !== frame.spotlight && !(frame.cxPair || []).includes(id));
+    if (releaseHold) { releaseHold = false; if (cam.userUntil > 0) cam.userUntil = 0; }
     if (cam.goal && now > cam.userUntil && opts.autoCamera !== false) {
       const g = sb && cam.fit?.desk ? speakerGoal(sb) : cam.goal;
       const sph = sphericalOf();

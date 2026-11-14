@@ -85,8 +85,11 @@
         </div>
         <div id="votebar" class="votebar hidden"></div>
         <div class="cam-tools">
-          <button id="camToggle" class="iconbtn cam-btn cam-toggle" type="button" aria-pressed="false" aria-label="切换视角操控" title="切换单指旋转镜头"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 1 9 9h-2.5A6.5 6.5 0 0 0 12 5.5V3Zm0 18a9 9 0 0 1-9-9h2.5A6.5 6.5 0 0 0 12 18.5V21Z" fill="currentColor"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button>
-          <button id="camReset" class="iconbtn cam-btn cam-reset" type="button" aria-label="重置视角" title="重置视角"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/></svg></button>
+          <div id="camHint" class="cam-hint hidden" role="note"></div>
+          <div class="cam-row">
+          <button id="camToggle" class="iconbtn cam-btn cam-toggle" type="button" aria-pressed="false" aria-label="镜头操控：关（点按开启旋转、缩放、平移）" title="镜头操控：点按开启旋转、缩放、平移"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 1 9 9h-2.5A6.5 6.5 0 0 0 12 5.5V3Zm0 18a9 9 0 0 1-9-9h2.5A6.5 6.5 0 0 0 12 18.5V21Z" fill="currentColor"/><circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span class="cam-lbl">镜头操控</span><span class="cam-state" id="camState">关</span></button>
+          <button id="camReset" class="iconbtn cam-btn cam-reset" type="button" aria-label="镜头复位（回到全员全景）" title="镜头复位（回到全员全景）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/></svg><span class="cam-lbl">复位</span></button>
+          </div>
         </div>
         <div id="stageMask" class="stage-mask hidden" data-state="idle" role="status" aria-live="polite">
           <div class="stage-mask-card">

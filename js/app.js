@@ -589,8 +589,17 @@ let stage = null;
 function syncCamToggleUI(on) {
   const btn = $('camToggle');
   if (!btn) return;
-  btn.setAttribute('aria-pressed', String(!!on));
-  btn.title = on ? '已锁定内容区滚动，拖动/双指可操控镜头（点击退出）' : '默认上下滚动内容，点击开启镜头旋转与缩放';
+  on = !!on;
+  // gestures below are exactly what stage3d.js wires into OrbitControls when camera control is on
+  const touch = matchMedia('(pointer: coarse)').matches;
+  const how = touch ? '单指拖动＝旋转 · 双指捏合＝缩放 · 双指拖动＝平移' : '拖动＝旋转 · 滚轮＝缩放 · 右键拖动或 Shift+拖动＝平移';
+  btn.setAttribute('aria-pressed', String(on));
+  const st = $('camState'); if (st) st.textContent = on ? '开' : '关';
+  btn.setAttribute('aria-label', on ? `镜头操控：开（${how}；再点关闭）` : '镜头操控：关（点按开启旋转、缩放、平移）');
+  btn.title = on ? `镜头操控已开：${how}。再点一次关闭${touch ? '，单指恢复滚动页面' : ''}；「复位」回到全员全景`
+    : `镜头操控已关${touch ? '：单指在舞台上下滑动＝滚动页面' : ''}。点按开启旋转、缩放、平移`;
+  const hint = $('camHint');
+  if (hint) { hint.textContent = on ? how : ''; hint.classList.toggle('hidden', !on); }
 }
 function isScrollBlockedByOverlay() {
   const isShown = (id) => { const el = $(id); return el && !el.classList.contains('hidden'); };
@@ -621,7 +630,7 @@ function getStage() {
       const host = $('stageWrap').getBoundingClientRect();
       const out = [];
       // HUD that floats over the canvas: bubbles must not cover it (elements outside the stage rect are ignored)
-      for (const el of document.querySelectorAll('#timerCard:not(.hidden), #camReset, #camToggle, .votebar:not(.hidden), .drawer:not(.hidden), #subtitle:not(.hidden), .hud-top > *')) {
+      for (const el of document.querySelectorAll('#timerCard:not(.hidden), #camReset, #camToggle, #camHint:not(.hidden), .votebar:not(.hidden), .drawer:not(.hidden), #subtitle:not(.hidden), .hud-top > *')) {
         const r = el.getBoundingClientRect();
         if (!r.width || !r.height || r.bottom <= host.top || r.top >= host.bottom || r.right <= host.left || r.left >= host.right) continue;
         out.push({ x: r.left - host.left, y: r.top - host.top, w: r.width, h: r.height });
